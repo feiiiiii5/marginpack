@@ -49,21 +49,43 @@ async function gtkDialog() {
 async function gtkAction(action, path) {
   const id = await gtkDialog();
   await command('xdotool', ['windowfocus', '--sync', id]);
+  await pause(300);
   if (action === 'cancel') {
     await command('xdotool', ['key', '--clearmodifiers', 'Escape']);
     return { window: saveTitle, action };
   }
-  await command('xdotool', ['key', '--clearmodifiers', 'ctrl+l', 'ctrl+a']);
-  // GTK requests clipboard formats before requesting UTF-8 text. Keep the
-  // owner alive through that negotiation, with bounded cleanup below.
-  const clipboard = spawn('xclip', ['-selection', 'clipboard', '-in', '-loops', '0', '-quiet', '-target', 'UTF8_STRING'], { stdio: ['pipe', 'ignore', 'ignore'] });
-  const clipboardExit = new Promise(done => { clipboard.on('exit', done); clipboard.on('error', done); });
-  clipboard.stdin.end(path);
-  try {
-    await pause(150);
-    await command('xdotool', ['key', '--clearmodifiers', 'ctrl+v']);
-    await Promise.race([clipboardExit, pause(2000)]);
-  } finally { clipboard.kill(); }
+  const clipboardOwner = text => {
+    const owner = spawn('xclip', ['-selection', 'clipboard', '-in', '-loops', '0', '-quiet', '-target', 'UTF8_STRING'], {stdio:['pipe','ignore','ignore']});
+    const ended = new Promise(done => {owner.on('exit',done); owner.on('error',done);});
+    owner.stdin.end(text);
+    return {owner, ended};
+  };
+  let copied = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await command('xdotool', ['key', '--clearmodifiers', 'ctrl+l']);
+    await pause(250);
+    await command('xdotool', ['key', '--clearmodifiers', 'ctrl+a']);
+    await pause(100);
+    let clipboard = clipboardOwner(path);
+    try {
+      await pause(200);
+      await command('xdotool', ['key', '--clearmodifiers', 'ctrl+v']);
+      await pause(500);
+    } finally {clipboard.owner.kill(); await Promise.race([clipboard.ended,pause(1000)]);}
+    // A sentinel ensures a failed Copy cannot merely read our pasted value
+    // back from the clipboard. Read the real focused native entry before Save.
+    clipboard = clipboardOwner('marginpack-native-copy-not-completed');
+    try {
+      await pause(150);
+      await command('xdotool', ['key', '--clearmodifiers', 'ctrl+a']);
+      await pause(150);
+      await command('xdotool', ['key', '--clearmodifiers', 'ctrl+c']);
+      await pause(300);
+      copied = await command('xclip', ['-selection','clipboard','-out','-target','UTF8_STRING'], {timeout:5000});
+    } finally {clipboard.owner.kill(); await Promise.race([clipboard.ended,pause(1000)]);}
+    if (copied === path) break;
+  }
+  if (copied !== path) throw new Error('GTK native filename entry did not contain the exact requested path: '+JSON.stringify(copied));
   await command('xdotool', ['key', '--clearmodifiers', 'Return']);
   await pause(400);
   // GTK's location entry may first accept the path; the save accelerator then
@@ -120,15 +142,13 @@ while((Get-Date)-lt $deadline){
  if($filename){break}; Start-Sleep -Milliseconds 250
 }
 if(-not $filename){throw 'Native FileNameControlHost child 1001 was not found'}
-$valuePattern=$null; $legacyPattern=$null
+$valuePattern=$null
 if($filename.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valuePattern)){
  $valuePattern.SetValue([string]$config.path)
-}elseif($filename.TryGetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,[ref]$legacyPattern)){
- $legacyPattern.SetValue([string]$config.path)
 }elseif($filename.Current.NativeWindowHandle -ne 0){
  if(-not [NativeDialogFocus]::SetWindowText([IntPtr]$filename.Current.NativeWindowHandle,[string]$config.path)){throw 'Native filename edit rejected WM_SETTEXT'}
 }else{throw 'Native filename control has no writable value or window handle'}
-$filename.SetFocus()
+try{$filename.SetFocus()}catch{}
 [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
 [System.Windows.Forms.SendKeys]::SendWait('%s')
 if($config.action -eq 'replace'){
@@ -144,9 +164,8 @@ if($config.action -eq 'replace'){
   if($yes){break}; Start-Sleep -Milliseconds 250
  }
  if(-not $yes){throw 'Windows replacement confirmation did not appear'}
- $invoke=$null; $legacy=$null
+ $invoke=$null
  if($yes.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invoke)){$invoke.Invoke()}
- elseif($yes.TryGetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,[ref]$legacy)){$legacy.DoDefaultAction()}
  elseif($yes.Current.NativeWindowHandle -ne 0){[void][NativeDialogFocus]::ClickButton([IntPtr]$yes.Current.NativeWindowHandle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)}
  else{throw 'Native replacement button cannot be invoked'}
 }
@@ -160,7 +179,7 @@ async function windowsAction(action, path) {
   try {
     const encoded = Buffer.from(powershell, 'utf16le').toString('base64');
     const output = await command('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]);
-    return { window: saveTitle, action, pathSuppliedThrough: 'Windows UI Automation ValuePattern', output: output.trim() };
+    return { window: saveTitle, action, pathSuppliedThrough: 'Windows native filename control', output: output.trim() };
   } finally {
     if (previous === undefined) delete process.env.MARGINPACK_NATIVE_ACTION;
     else process.env.MARGINPACK_NATIVE_ACTION = previous;
