@@ -16,11 +16,11 @@ Keep the saved page, highlights and comments together. The recipient opens the f
 - Lets the recipient jump to a highlighted passage and toggle highlights.
 - Uses a readable static presentation. Original scripts, page CSS and unsupported resources are removed; this is not a pixel-perfect website archive.
 
-MarginPack is an independent third-party project, unaffiliated with Zotero or SingleFile. Version 0.1 is an early release with a deliberately narrow format boundary. See [validation and compatibility](docs/VALIDATION.md).
+MarginPack is an independent third-party project, unaffiliated with Zotero or SingleFile. Version 0.1.1 is an early release with a deliberately narrow format boundary. See [validation and compatibility](docs/VALIDATION.md).
 
 ## Install and export
 
-1. Download `marginpack-0.1.0.xpi` from [Releases](https://github.com/feiiiiii5/marginpack/releases).
+1. Download `marginpack-0.1.1.xpi` from [Releases](https://github.com/feiiiiii5/marginpack/releases).
 2. In Zotero 10, open **Tools → Plugins**, then install the downloaded file.
 3. Select one downloaded **HTML snapshot attachment**, or a parent item containing exactly one HTML snapshot.
 4. Choose **Tools → Export annotated snapshot with MarginPack…**. The same action is available in the item's context menu.
@@ -32,7 +32,7 @@ For a no-install preview, download `marginpack-demo.html` from the release and o
 
 ## Supported in 0.1
 
-The Zotero adapter targets the **10.0.x** series; the actual application check used **10.0.7 on macOS ARM64**. Snapshot locations use Zotero's CSS and UTF-16 text-position selectors. Highlights, underlines and note comments are supported; unresolved and unsupported records remain visible in the exported file.
+The Zotero adapter targets the **10.0.x** series. The validation record distinguishes application API checks, real native save-dialog checks, and browser tests for each tested platform. Snapshot locations use Zotero's CSS and UTF-16 text-position selectors. Highlights, underlines and note comments are supported; unresolved and unsupported records remain visible in the exported file.
 
 Only existing **single-file UTF-8 HTML snapshots** are in scope. PDF/EPUB annotations, arbitrary local website folders, external images, embedded frames, editing annotations in the export, live webpage updates and import back into Zotero are outside this release. Missing resources are not fetched. Keep the original library as your authoritative editable copy.
 

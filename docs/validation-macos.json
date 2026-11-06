@@ -1,0 +1,357 @@
+{
+  "recordedDate": "2026-11-06",
+  "os": "macOS 27.3 ARM64",
+  "artifact": "marginpack-0.1.1.xpi",
+  "artifactSha256": "db45a51cd3eb2eb15ce9acd57ea1ca9c30b9b63561dd155380943955393d85f0",
+  "nativeDriver": "Computer-use accessibility automation; real OS save, cancel and replacement confirmation",
+  "fixtures": "Original synthetic page and API-created annotation",
+  "caveats": [
+    "Selected real item supplied through a test seam; annotation creation and library selection clicks are not simulated.",
+    "Alerts are recorded without opening blocking notification windows."
+  ],
+  "runs": [
+    {
+      "mode": "native",
+      "zoteroVersion": "10.0.7",
+      "platform": "macos",
+      "addonVersion": "0.1.1",
+      "pickerMode": "real-native-filepicker",
+      "selectionMode": "selected-real-item-seam",
+      "checks": [
+        {
+          "name": "main window exists",
+          "passed": true
+        },
+        {
+          "name": "expected Zotero version",
+          "passed": true
+        },
+        {
+          "name": "built XPI installed and active",
+          "passed": true
+        },
+        {
+          "name": "expected built addon version",
+          "passed": true
+        },
+        {
+          "name": "production Tools menu registered",
+          "passed": true
+        },
+        {
+          "name": "production context menu registered",
+          "passed": true
+        },
+        {
+          "name": "selected real HTML attachment",
+          "passed": true
+        },
+        {
+          "name": "new Unicode destination saved through real IOUtils",
+          "passed": true
+        },
+        {
+          "name": "real serialized annotation located",
+          "passed": true
+        },
+        {
+          "name": "standalone viewer contains synthetic Unicode comment",
+          "passed": true
+        },
+        {
+          "name": "after save: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "save dialog cancellation is clean",
+          "passed": true
+        },
+        {
+          "name": "cancellation creates no extra file",
+          "passed": true
+        },
+        {
+          "name": "after cancel: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "confirmed native replacement refused",
+          "passed": true
+        },
+        {
+          "name": "replacement creates no extra file",
+          "passed": true
+        },
+        {
+          "name": "after replacement: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "production menu remains after test controller cleanup",
+          "passed": true
+        }
+      ],
+      "phases": [
+        {
+          "phase": "initializing",
+          "at": "2026-11-06T08:34:01.170Z"
+        },
+        {
+          "phase": "waiting-save-new",
+          "at": "2026-11-06T08:34:04.471Z"
+        },
+        {
+          "phase": "waiting-cancel",
+          "at": "2026-11-06T08:35:31.487Z"
+        },
+        {
+          "phase": "waiting-replace",
+          "at": "2026-11-06T08:36:01.925Z"
+        },
+        {
+          "phase": "finished",
+          "at": "2026-11-06T08:36:32.631Z"
+        }
+      ],
+      "alerts": [
+        "Your standalone HTML export is saved. Open it in a browser.\n\n1 annotations: 1 matched, 0 unresolved, 0 unsupported. Review the status of each annotation in the exported file.",
+        "Choose a new filename for your export. MarginPack never replaces an existing file, so your saved snapshots stay unchanged."
+      ],
+      "ok": true
+    },
+    {
+      "mode": "headless",
+      "zoteroVersion": "10.0.7",
+      "platform": "macos",
+      "addonVersion": "0.1.1",
+      "pickerMode": "deterministic-picker-seam",
+      "selectionMode": "selected-real-item-seam",
+      "checks": [
+        {
+          "name": "main window exists",
+          "passed": true
+        },
+        {
+          "name": "expected Zotero version",
+          "passed": true
+        },
+        {
+          "name": "built XPI installed and active",
+          "passed": true
+        },
+        {
+          "name": "expected built addon version",
+          "passed": true
+        },
+        {
+          "name": "production Tools menu registered",
+          "passed": true
+        },
+        {
+          "name": "production context menu registered",
+          "passed": true
+        },
+        {
+          "name": "selected real HTML attachment",
+          "passed": true
+        },
+        {
+          "name": "new Unicode destination saved through real IOUtils",
+          "passed": true
+        },
+        {
+          "name": "real serialized annotation located",
+          "passed": true
+        },
+        {
+          "name": "standalone viewer contains synthetic Unicode comment",
+          "passed": true
+        },
+        {
+          "name": "after save: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after save: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "save dialog cancellation is clean",
+          "passed": true
+        },
+        {
+          "name": "cancellation creates no extra file",
+          "passed": true
+        },
+        {
+          "name": "after cancel: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after cancel: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "confirmed native replacement refused",
+          "passed": true
+        },
+        {
+          "name": "replacement creates no extra file",
+          "passed": true
+        },
+        {
+          "name": "after replacement: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after replacement: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "existing destination refused even after picker reports OK",
+          "passed": true
+        },
+        {
+          "name": "after exclusive-create refusal: original source bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after exclusive-create refusal: stored attachment bytes unchanged",
+          "passed": true
+        },
+        {
+          "name": "after exclusive-create refusal: annotation unchanged",
+          "passed": true
+        },
+        {
+          "name": "after exclusive-create refusal: existing sentinel unchanged",
+          "passed": true
+        },
+        {
+          "name": "after exclusive-create refusal: saved export unchanged",
+          "passed": true
+        },
+        {
+          "name": "production menu remains after test controller cleanup",
+          "passed": true
+        }
+      ],
+      "phases": [
+        {
+          "phase": "initializing",
+          "at": "2026-11-06T08:37:19.560Z"
+        },
+        {
+          "phase": "waiting-save-new",
+          "at": "2026-11-06T08:37:19.742Z"
+        },
+        {
+          "phase": "waiting-cancel",
+          "at": "2026-11-06T08:37:19.746Z"
+        },
+        {
+          "phase": "waiting-replace",
+          "at": "2026-11-06T08:37:19.748Z"
+        },
+        {
+          "phase": "checking-create-race",
+          "at": "2026-11-06T08:37:19.750Z"
+        },
+        {
+          "phase": "finished",
+          "at": "2026-11-06T08:37:19.752Z"
+        }
+      ],
+      "alerts": [
+        "Your standalone HTML export is saved. Open it in a browser.\n\n1 annotations: 1 matched, 0 unresolved, 0 unsupported. Review the status of each annotation in the exported file.",
+        "Choose a new filename for your export. MarginPack never replaces an existing file, so your saved snapshots stay unchanged.",
+        "That file already exists. Run the export again and choose a new filename."
+      ],
+      "ok": true
+    }
+  ]
+}
