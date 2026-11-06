@@ -89,7 +89,11 @@ Add-Type -AssemblyName UIAutomationTypes
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @'
 using System; using System.Runtime.InteropServices;
-public static class NativeDialogFocus { [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h); }
+public static class NativeDialogFocus {
+ [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+ [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h,string text);
+ [DllImport("user32.dll", EntryPoint="SendMessageW")] public static extern IntPtr ClickButton(IntPtr h,uint m,IntPtr w,IntPtr l);
+}
 '@
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:MARGINPACK_NATIVE_ACTION | ConvertFrom-Json
 $root = [System.Windows.Automation.AutomationElement]::RootElement
@@ -107,22 +111,23 @@ if($config.action -eq 'cancel'){
  [System.Windows.Forms.SendKeys]::SendWait('{ESC}')
  Write-Output 'Cancelled the real Windows save dialog'; exit 0
 }
-$editCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit)
 $filename=$null; $deadline=(Get-Date).AddSeconds(30)
+$hostCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'FileNameControlHost')
+$idCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::AutomationIdProperty,'1001')
 while((Get-Date)-lt $deadline){
- $edits=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
- foreach($edit in $edits){
-  if($edit.Current.Name -match '^File name' -or $edit.Current.AutomationId -in @('1001','1148')){ $filename=$edit; break }
- }
+ $hostControl=$dialog.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$hostCondition)
+ if($hostControl){$filename=$hostControl.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$idCondition)}
  if($filename){break}; Start-Sleep -Milliseconds 250
 }
-if(-not $filename){
- $controls=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
- $details=@($controls | ForEach-Object { $_.Current.ControlType.ProgrammaticName+':'+$_.Current.AutomationId+':'+$_.Current.Name }) -join '; '
- throw ('Native File name edit was not found; controls: '+$details)
-}
-$pattern=$filename.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-$pattern.SetValue([string]$config.path)
+if(-not $filename){throw 'Native FileNameControlHost child 1001 was not found'}
+$valuePattern=$null; $legacyPattern=$null
+if($filename.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valuePattern)){
+ $valuePattern.SetValue([string]$config.path)
+}elseif($filename.TryGetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,[ref]$legacyPattern)){
+ $legacyPattern.SetValue([string]$config.path)
+}elseif($filename.Current.NativeWindowHandle -ne 0){
+ if(-not [NativeDialogFocus]::SetWindowText([IntPtr]$filename.Current.NativeWindowHandle,[string]$config.path)){throw 'Native filename edit rejected WM_SETTEXT'}
+}else{throw 'Native filename control has no writable value or window handle'}
 $filename.SetFocus()
 [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
 [System.Windows.Forms.SendKeys]::SendWait('%s')
@@ -132,14 +137,18 @@ if($config.action -eq 'replace'){
   $windows=$root.FindAll([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.Condition]::TrueCondition)
   foreach($window in $windows){
    if($window.Current.ProcessId -ne $dialogProcess){continue}
-   $buttons=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,(New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Button)))
+   $buttons=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
    foreach($button in $buttons){if($button.Current.Name -match '^(&)?Yes$|^Replace$'){ $yes=$button; break }}
    if($yes){break}
   }
   if($yes){break}; Start-Sleep -Milliseconds 250
  }
  if(-not $yes){throw 'Windows replacement confirmation did not appear'}
- $yes.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern).Invoke()
+ $invoke=$null; $legacy=$null
+ if($yes.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invoke)){$invoke.Invoke()}
+ elseif($yes.TryGetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern,[ref]$legacy)){$legacy.DoDefaultAction()}
+ elseif($yes.Current.NativeWindowHandle -ne 0){[void][NativeDialogFocus]::ClickButton([IntPtr]$yes.Current.NativeWindowHandle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)}
+ else{throw 'Native replacement button cannot be invoked'}
 }
 Write-Output ('Operated real Windows save dialog: '+$config.action)
 `;
