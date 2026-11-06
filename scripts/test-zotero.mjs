@@ -8,6 +8,10 @@ if (!process.env.ZOTERO_BIN) throw new Error('Set ZOTERO_BIN to a Zotero 10.0.x 
 const native = process.env.ZOTERO_NATIVE === '1';
 const productionMenu = process.env.ZOTERO_PRODUCTION_MENU === '1';
 if (productionMenu && !native) throw new Error('ZOTERO_PRODUCTION_MENU=1 requires ZOTERO_NATIVE=1; its dialogs must be operated on the native application.');
+const automaticMenu = process.env.ZOTERO_AUTO_MENU === '1';
+if (automaticMenu && (!productionMenu || process.env.GITHUB_ACTIONS !== 'true')) {
+  throw new Error('ZOTERO_AUTO_MENU=1 requires production-menu mode on GitHub Actions; local native verification uses the approved computer-use surface.');
+}
 const mode = productionMenu ? 'production' : native ? 'native' : 'headless';
 const timeout = Number(process.env.ZOTERO_TEST_TIMEOUT_MS || (productionMenu ? 300000 : native ? 900000 : 300000));
 if (!Number.isSafeInteger(timeout) || timeout < 30000 || timeout > 1200000) {
@@ -38,7 +42,7 @@ for (const directory of [profile, data, harness, exportDirectory, resolve(profil
   await mkdir(directory, { recursive: true });
 }
 const config = {
-  mode, productionMenu, run, expectedAddonVersion: pkg.version, expectedVersion: process.env.ZOTERO_EXPECTED_VERSION || '10.0.7',
+  mode, productionMenu, automaticMenu, run, expectedAddonVersion: pkg.version, expectedVersion: process.env.ZOTERO_EXPECTED_VERSION || '10.0.7',
   resultFile: resolve(run, 'result.json'),
   progressFile: resolve(run, 'progress.json'),
   latestFile: resolve(root, `.runtime/zotero-${mode}-latest.json`),
@@ -78,7 +82,7 @@ const prefs = {
   'extensions.zoteroOpenOfficeIntegration.skipInstallation': true,
   'extensions.zotero.httpServer.enabled': false, 'app.update.enabled': false,
   'extensions.update.enabled': false, 'datareporting.healthreport.uploadEnabled': false,
-  'toolkit.telemetry.enabled': false, 'extensions.zotero.debug.log': true,
+  'toolkit.telemetry.enabled': false, 'extensions.zotero.debug.log': true, 'extensions.zotero.debug.level': 3,
   'marginpack.test.config': JSON.stringify(config),
 };
 await writeFile(resolve(profile, 'user.js'), Object.entries(prefs).map(([key, value]) => `user_pref(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join('\n'));

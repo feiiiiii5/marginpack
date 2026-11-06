@@ -10,9 +10,11 @@ if (process.env.GITHUB_ACTIONS !== 'true' || !['linux', 'win32'].includes(proces
 }
 if (!process.env.ZOTERO_BIN) throw new Error('Set up the pinned official Zotero executable first.');
 const root = fileURLToPath(new URL('..', import.meta.url));
-const latest = resolve(root, '.runtime/zotero-native-latest.json');
-const evidencePath = resolve(root, 'output/native-driver.json');
-const evidence = { platform: process.platform, operations: [], ok: false };
+const productionMenu = process.env.ZOTERO_PRODUCTION_MENU === '1';
+const mode = productionMenu ? 'production' : 'native';
+const latest = resolve(root, `.runtime/zotero-${mode}-latest.json`);
+const evidencePath = resolve(root, productionMenu ? 'output/production-driver.json' : 'output/native-driver.json');
+const evidence = { platform: process.platform, mode, operations: [], ok: false };
 await mkdir(resolve(root, 'output'), { recursive: true });
 await rm(latest, { force: true });
 const pause = (ms) => new Promise(done => setTimeout(done, ms));
@@ -104,6 +106,24 @@ async function gtkAction(action, path) {
   return { window: saveTitle, action, pathSuppliedThrough: 'X11 clipboard' };
 }
 
+async function gtkSuccess(processID) {
+  const deadline = Date.now() + 60000;
+  while (Date.now() < deadline) {
+    try {
+      const ids = (await command('xdotool', ['search', '--onlyvisible', '--name', '^MarginPack$'], { timeout: 5000 })).trim().split('\n');
+      for (const id of ids) {
+        const pid = (await command('xdotool', ['getwindowpid', id], { timeout: 5000 })).trim();
+        if (pid !== String(processID)) continue;
+        await command('xdotool', ['windowfocus', '--sync', id]);
+        await command('xdotool', ['key', '--clearmodifiers', 'Return']);
+        return { window: 'MarginPack', action: 'dismiss-success', applicationPIDMatched: true };
+      }
+    } catch (_) { /* The real application alert is not visible yet. */ }
+    await pause(250);
+  }
+  throw new Error('The real MarginPack notification was not visible.');
+}
+
 const powershell = String.raw`
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName UIAutomationClient
@@ -117,6 +137,20 @@ public static class NativeDialogFocus {
 '@
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:MARGINPACK_NATIVE_ACTION | ConvertFrom-Json
 $root = [System.Windows.Automation.AutomationElement]::RootElement
+if($config.action -eq 'dismiss-success'){
+ $nameCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,'MarginPack')
+ $pidCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,[int]$config.processID)
+ $alertCondition=New-Object System.Windows.Automation.AndCondition($nameCondition,$pidCondition)
+ $deadline=(Get-Date).AddSeconds(60); $alert=$null
+ while((Get-Date)-lt $deadline){
+  $alert=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$alertCondition)
+  if($alert){break}; Start-Sleep -Milliseconds 250
+ }
+ if(-not $alert){throw 'The real MarginPack notification was not visible'}
+ [void][NativeDialogFocus]::SetForegroundWindow([IntPtr]$alert.Current.NativeWindowHandle)
+ [System.Windows.Forms.SendKeys]::SendWait('{ENTER}')
+ Write-Output 'Dismissed the real MarginPack notification'; exit 0
+}
 $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty, 'Save MarginPack export as a new HTML file')
 $deadline=(Get-Date).AddSeconds(60); $dialog=$null
 while((Get-Date)-lt $deadline){
@@ -176,9 +210,9 @@ if($config.action -eq 'replace'){
 
 Write-Output ('Operated real Windows save dialog: '+$config.action)
 `;
-async function windowsAction(action, path) {
+async function windowsAction(action, path, processID) {
   const config = resolve(root, '.runtime/native-action.json');
-  await writeFile(config, JSON.stringify({ action, path, evidenceImage: resolve(root, 'output/windows-replacement.png') }), 'utf8');
+  await writeFile(config, JSON.stringify({ action, path, processID, evidenceImage: resolve(root, 'output/windows-replacement.png') }), 'utf8');
   const previous = process.env.MARGINPACK_NATIVE_ACTION;
   process.env.MARGINPACK_NATIVE_ACTION = config;
   try {
@@ -192,7 +226,8 @@ async function windowsAction(action, path) {
 }
 
 const child = spawn(process.execPath, [resolve(root, 'scripts/test-zotero.mjs')], {
-  cwd: root, env: { ...process.env, ZOTERO_NATIVE: '1', ZOTERO_TEST_TIMEOUT_MS: '480000' }, stdio: 'inherit',
+  cwd: root, env: { ...process.env, ZOTERO_NATIVE: '1', ZOTERO_TEST_TIMEOUT_MS: productionMenu ? '300000' : '480000',
+    ...(productionMenu ? { ZOTERO_AUTO_MENU: '1' } : {}) }, stdio: 'inherit',
 });
 let childDone = false, exitCode;
 const exited = new Promise(done => {
@@ -205,20 +240,25 @@ try {
   while (!childDone && Date.now() < deadline) {
     let current;
     try { current = JSON.parse(await readFile(latest, 'utf8')); } catch (_) {}
-    if (current && !handled.has(current.phase) && /^waiting-(save-new|cancel|replace)$/.test(current.phase)) {
+    if (current && !handled.has(current.phase) && /^waiting-(save-new|cancel|replace|production-menu)$/.test(current.phase)) {
       handled.add(current.phase);
       const action = current.phase === 'waiting-cancel' ? 'cancel' : current.phase === 'waiting-replace' ? 'replace' : 'save';
       const operation = process.platform === 'win32'
         ? await windowsAction(action, current.expectedSavePath)
         : await gtkAction(action, current.expectedSavePath);
       evidence.operations.push({ phase: current.phase, ...operation });
+      if (current.phase === 'waiting-production-menu') {
+        evidence.operations.push(process.platform === 'win32'
+          ? await windowsAction('dismiss-success', undefined, current.applicationPID)
+          : await gtkSuccess(current.applicationPID));
+      }
       await writeFile(evidencePath, JSON.stringify(evidence, null, 2));
     }
     await pause(250);
   }
   if (!childDone) throw new Error('Native application driver exceeded its bounded run.');
-  const result = JSON.parse(await readFile(resolve(root, 'output/zotero-native-result.json'), 'utf8'));
-  if (exitCode !== 0 || !result.ok || handled.size !== 3) throw new Error('Native application checks did not pass all save/cancel/replacement phases.');
+  const result = JSON.parse(await readFile(resolve(root, `output/zotero-${mode}-result.json`), 'utf8'));
+  if (exitCode !== 0 || !result.ok || handled.size !== (productionMenu ? 1 : 3)) throw new Error('Native application checks did not pass the required phases.');
   evidence.ok = true;
   evidence.applicationChecksPassed = result.checks.filter(check => check.passed).length;
 } catch (error) {

@@ -62,6 +62,16 @@ jobs:
       - name: Real Windows save dialog checks
         if: runner.os == 'Windows'
         run: node scripts/native-ci-driver.mjs
+      - name: Production menu through real GTK save and notification dialogs
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1440x1000x24' node scripts/native-ci-driver.mjs
+        env:
+          ZOTERO_PRODUCTION_MENU: '1'
+      - name: Production menu through real Windows save and notification dialogs
+        if: runner.os == 'Windows'
+        run: node scripts/native-ci-driver.mjs
+        env:
+          ZOTERO_PRODUCTION_MENU: '1'
       - name: Retain bounded synthetic test evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -72,6 +82,7 @@ jobs:
             output/zotero-*-export.html
             output/zotero-*-log.txt
             output/native-driver.json
+            output/production-driver.json
             output/windows-replacement.png
             .runtime/zotero-setup.json
           if-no-files-found: warn

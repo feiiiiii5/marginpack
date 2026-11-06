@@ -65,6 +65,18 @@ async function runChecks() {
     check("production Tools menu registered", Boolean(win.document.getElementById("marginpack-tools-export")));
     check("production context menu registered", Boolean(win.document.getElementById("marginpack-item-export")));
 
+    // uiReadyPromise can resolve while the fresh library's initial bulk load
+    // is still in progress. Finish that real load before inserting fixture
+    // items, so their notifications and writes cannot race initial loading.
+    const library = Zotero.Libraries.get(Zotero.Libraries.userLibraryID);
+    result.libraryBeforeFixtures = { loaded: library.getDataLoaded("item"), loading: Boolean(library.getDataLoadedPromise("item")),
+      itemsView: Boolean(win.ZoteroPane.itemsView), collectionsView: Boolean(win.ZoteroPane.collectionsView),
+      readyState: win.document.readyState };
+    await progress("waiting-test-library-ready", { libraryBeforeFixtures: result.libraryBeforeFixtures });
+    await waitFor(() => win.ZoteroPane.itemsView && win.ZoteroPane.collectionsView, "Test library pane views");
+    await bounded(library.waitForDataLoad("item"), "Initial test library item data loading");
+    check("synthetic library item data loaded before fixture writes", library.getDataLoaded("item"));
+
     const sourceBefore = await IOUtils.read(config.sourceFile);
     const existingBefore = await IOUtils.read(config.existingFile);
     const parent = new Zotero.Item("webpage");
@@ -77,11 +89,13 @@ async function runChecks() {
     await attachment.saveTx();
     const attachmentPath = await attachment.getFilePathAsync();
     const attachmentBefore = await IOUtils.read(attachmentPath);
-    await progress("opening-synthetic-snapshot-reader");
+    result.libraryBeforeReader = { loaded: library.getDataLoaded("item"), loading: Boolean(library.getDataLoadedPromise("item")),
+      itemsView: Boolean(win.ZoteroPane.itemsView), collectionsView: Boolean(win.ZoteroPane.collectionsView),
+      readyState: win.document.readyState };
+    await progress("opening-synthetic-snapshot-reader", { libraryBeforeReader: result.libraryBeforeReader });
     const reader = await bounded(Zotero.Reader.open(attachment.id), "Opening the synthetic snapshot reader");
     check("real Zotero snapshot reader opened", Boolean(reader) && reader.type === "snapshot");
     await bounded(reader._initPromise, "Snapshot reader bootstrap");
-    await bounded(reader._internalReader.initializedPromise, "Snapshot reader initialization");
     const view = await waitFor(() => reader._internalReader._primaryView, "Snapshot primary view");
     await bounded(view.initializedPromise, "Snapshot document initialization");
     const readerDocument = view._iframeDocument;
@@ -139,21 +153,31 @@ async function runChecks() {
     check("selected real HTML attachment", win.ZoteroPane.getSelectedItems()[0]?.id === attachment.id);
 
     if (productionMenu) {
-      // No controller is loaded or created here. The user/approved computer-use
-      // surface invokes the menu registered by the installed add-on's startup,
-      // operates the real save picker and dismisses its real success alert.
+      // No controller is loaded or created here. Native computer use operates
+      // the installed add-on's menu. On CI only, doCommand dispatches that same
+      // registered XUL action; the native driver operates the actual dialogs.
       result.controllerMode = "production-startup-menu";
       result.pickerMode = "real-native-filepicker";
       result.alertsMode = "actual-application-alerts";
       const menu = win.document.getElementById("marginpack-tools-export");
       check("one enabled production Tools action available", win.document.querySelectorAll("#marginpack-tools-export").length === 1 && !menu.disabled);
+      result.commandDispatchMethod = config.automaticMenu ? "registered-XUL-menu-doCommand" : "external-native-ui-action";
       await progress("waiting-production-menu", {
         expectedSavePath: config.exportFile,
         action: "Choose Tools > Export annotated snapshot with MarginPack, save at expectedSavePath, and dismiss the real success alert.",
       });
+      let commandError;
+      if (config.automaticMenu) {
+        check("registered production menu supports command dispatch", typeof menu.doCommand === "function");
+        setTimeout(() => {
+          try { menu.doCommand(); }
+          catch (error) { commandError = error; }
+        }, 0);
+      }
       let observedBusy = false, saved = false;
       const deadline = Date.now() + 240000;
       while (Date.now() < deadline) {
+        if (commandError) throw new Error("Production menu command failed: " + String(commandError));
         observedBusy ||= menu.disabled;
         if (await IOUtils.exists(config.exportFile) && !menu.disabled) { saved = true; break; }
         await Zotero.Promise.delay(200);
