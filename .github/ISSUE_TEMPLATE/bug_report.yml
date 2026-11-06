@@ -1,0 +1,29 @@
+name: Export problem
+description: Report an incorrect or incomplete export using a small non-sensitive example.
+body:
+  - type: markdown
+    attributes:
+      value: Please do not upload personal libraries, credentials, private notes or third-party copyrighted snapshots. Use original synthetic examples.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: MarginPack version, Zotero version, operating system and browser.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and expected result
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Actual result and unresolved annotation report
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Small original HTML and annotation JSON example

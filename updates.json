@@ -1,0 +1,19 @@
+{
+  "addons": {
+    "marginpack@marginpack.local": {
+      "updates": [
+        {
+          "version": "0.1.0",
+          "update_link": "https://github.com/feiiiiii5/marginpack/releases/download/v0.1.0/marginpack-0.1.0.xpi",
+          "update_hash": "sha256:72cc2fa2003821d523bfd91b8cf2edaf73edd7083bea081f9141d1879cbf24e6",
+          "applications": {
+            "zotero": {
+              "strict_min_version": "10.0",
+              "strict_max_version": "10.0.*"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

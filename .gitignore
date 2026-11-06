@@ -1,0 +1,10 @@
+node_modules/
+dist/
+output/
+.runtime/
+.DS_Store
+*.log
+*.sqlite*
+*.xpi
+*.dmg
+*.app/
