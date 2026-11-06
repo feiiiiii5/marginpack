@@ -72,6 +72,7 @@ jobs:
             output/zotero-*-export.html
             output/zotero-*-log.txt
             output/native-driver.json
+            output/windows-replacement.png
             .runtime/zotero-setup.json
           if-no-files-found: warn
           retention-days: 14

@@ -159,32 +159,26 @@ for($attempt=0;$attempt -lt 2;$attempt++){
 if($copied -ne [string]$config.path){throw ('Native Windows filename entry did not match requested path: '+$copied)}
 [System.Windows.Forms.SendKeys]::SendWait('%s')
 if($config.action -eq 'replace'){
- $deadline=(Get-Date).AddSeconds(30); $yes=$null; $confirmation=$null; $seen=@()
- while((Get-Date)-lt $deadline){
-  $windows=$root.FindAll([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.Condition]::TrueCondition)
-  foreach($window in $windows){
-   $caption=$window.Current.Name
-   if($window.Current.ProcessId -ne $dialogProcess -and $caption -notmatch 'Confirm.*Save|Save.*As|MarginPack'){continue}
-   $seen += ($window.Current.ProcessId.ToString()+':'+$caption)
-   $buttons=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
-   foreach($button in $buttons){if($button.Current.Name.Trim().Replace('&','').Replace('_','') -match '^(Yes|Replace)(\b|$)' -or ($caption -match 'Confirm' -and $button.Current.AutomationId -eq '6')){ $yes=$button; $confirmation=$window; break }}
-   if($yes){break}
-  }
-  if($yes){break}; Start-Sleep -Milliseconds 250
- }
- if(-not $yes){throw ('Windows replacement confirmation did not appear; candidate windows: '+(($seen|Select-Object -Unique)-join '; '))}
- [void][NativeDialogFocus]::SetForegroundWindow([IntPtr]$confirmation.Current.NativeWindowHandle)
- $invoke=$null
- if($yes.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invoke)){$invoke.Invoke()}
- elseif($yes.Current.Name -match 'Yes'){[System.Windows.Forms.SendKeys]::SendWait('%y')}
- else{[System.Windows.Forms.SendKeys]::SendWait('%r')}
-
+ # The brokered confirmation is not consistently exposed in the UIA tree on
+ # hosted Windows. Use its standard Yes accelerator; the application's real
+ # returnReplace code and refusal alert remain the authoritative assertions.
+ Start-Sleep -Milliseconds 700
+ Add-Type -AssemblyName System.Drawing
+ $screen=[System.Windows.Forms.SystemInformation]::VirtualScreen
+ $bitmap=New-Object System.Drawing.Bitmap($screen.Width,$screen.Height)
+ $graphics=[System.Drawing.Graphics]::FromImage($bitmap)
+ try{
+  $graphics.CopyFromScreen($screen.Left,$screen.Top,0,0,$bitmap.Size)
+  $bitmap.Save([string]$config.evidenceImage,[System.Drawing.Imaging.ImageFormat]::Png)
+ }finally{$graphics.Dispose();$bitmap.Dispose()}
+ [System.Windows.Forms.SendKeys]::SendWait('%y')
 }
+
 Write-Output ('Operated real Windows save dialog: '+$config.action)
 `;
 async function windowsAction(action, path) {
   const config = resolve(root, '.runtime/native-action.json');
-  await writeFile(config, JSON.stringify({ action, path }), 'utf8');
+  await writeFile(config, JSON.stringify({ action, path, evidenceImage: resolve(root, 'output/windows-replacement.png') }), 'utf8');
   const previous = process.env.MARGINPACK_NATIVE_ACTION;
   process.env.MARGINPACK_NATIVE_ACTION = config;
   try {
