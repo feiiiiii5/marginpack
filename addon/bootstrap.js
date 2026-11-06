@@ -174,13 +174,19 @@ var MarginPackAddon = (() => {
           throw new ExportError("MarginPack could not create the export. No file was saved.");
         }
 
-        const { FilePicker } = chromeUtils.importESModule(PICKER_MODULE);
-        const picker = new FilePicker();
-        picker.init(window, "Save MarginPack export as a new HTML file", picker.modeSave);
-        picker.appendFilter("HTML document", "*.html");
-        picker.defaultExtension = "html";
-        picker.defaultString = "annotated-snapshot-marginpack.html";
-        const result = await picker.show();
+        let picker;
+        let result;
+        try {
+          const { FilePicker } = chromeUtils.importESModule(PICKER_MODULE);
+          picker = new FilePicker();
+          picker.init(window, "Save MarginPack export as a new HTML file", picker.modeSave);
+          picker.appendFilter("HTML document", "*.html");
+          picker.defaultExtension = "html";
+          picker.defaultString = "annotated-snapshot-marginpack.html";
+          result = await picker.show();
+        } catch (_) {
+          throw new ExportError("The system save dialog failed. No file was saved. Try exporting again.");
+        }
         if (!isCurrent(window, state) || result === picker.returnCancel) {
           return { status: "cancelled" };
         }

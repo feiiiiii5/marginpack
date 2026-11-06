@@ -5,11 +5,20 @@ on:
 permissions:
   contents: read
 jobs:
-  validate:
-    runs-on: ubuntu-latest
+  browser-and-adapter:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -20,3 +29,49 @@ jobs:
       - run: npm test
       - run: npm run test:browser
       - run: npm run build
+  zotero-application:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Linux native application dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y xvfb xdotool xclip libgtk-3-0t64 libdbus-glib-1-2 libasound2t64
+      - run: npm run build
+      - name: Download official portable Zotero 10.0.7
+        run: node scripts/setup-zotero.mjs
+      - name: Real application API and filesystem checks
+        run: node scripts/test-zotero.mjs
+        env:
+          ZOTERO_TEST_TIMEOUT_MS: '300000'
+      - name: Real GTK save dialog checks
+        if: runner.os == 'Linux'
+        run: xvfb-run -a -s '-screen 0 1440x1000x24' node scripts/native-ci-driver.mjs
+      - name: Real Windows save dialog checks
+        if: runner.os == 'Windows'
+        run: node scripts/native-ci-driver.mjs
+      - name: Retain bounded synthetic test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: zotero-10.0.7-${{ runner.os }}
+          path: |
+            output/zotero-*-result.json
+            output/zotero-*-export.html
+            output/zotero-*-log.txt
+            output/native-driver.json
+            .runtime/zotero-setup.json
+          if-no-files-found: warn
+          retention-days: 14

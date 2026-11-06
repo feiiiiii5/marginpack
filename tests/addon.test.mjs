@@ -93,17 +93,17 @@ function harness(options = {}) {
       this.returnOK = 0;
       this.returnCancel = 1;
       this.returnReplace = 2;
-      this.file = '/synthetic/exports/result.html';
+      this.file = options.pickerPath ?? '/synthetic/exports/result.html';
       calls.pickers.push(this);
     }
-    init() {}
+    init(...args) { return options.pickerInit?.(...args); }
     appendFilter() {}
-    async show() { return options.pickerResult ?? this.returnOK; }
+    async show() { return options.pickerShow ? options.pickerShow(this) : options.pickerResult ?? this.returnOK; }
   }
   const chromeUtils = { importESModule: () => ({ FilePicker }) };
   const ioUtils = {
     read: async (path) => { calls.reads.push(path); return options.bytes || new TextEncoder().encode(source); },
-    writeUTF8: async (...args) => calls.writes.push(args),
+    writeUTF8: async (...args) => { calls.writes.push(args); return options.writeUTF8?.(...args); },
   };
   const controller = api.createController({ zotero, services, chromeUtils, ioUtils });
   controller.start('resource://marginpack/');
@@ -249,4 +249,110 @@ test('invalid UTF-8 or a snapshot changed during reading cannot produce a mislea
       assert.equal(fixture.calls.writes.length, 0);
     } finally { fixture.controller.stop(); }
   }
+});
+
+test('native dialog errors identify the save dialog, save nothing and restore the menu', async () => {
+  // Native nsIFilePicker init/open can throw NS_ERROR_NOT_AVAILABLE, for
+  // example when the native dialog cannot be opened. Zotero forwards init
+  // directly and propagates open exceptions through its Promise show().
+  for (const stage of ['init', 'show']) {
+    const nativeFailure = () => { throw new Error('NS_ERROR_NOT_AVAILABLE'); };
+    const fixture = harness(stage === 'init' ? { pickerInit: nativeFailure } : { pickerShow: nativeFailure });
+    try {
+      assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'error');
+      assert.equal(fixture.calls.writes.length, 0);
+      assert.equal(fixture.calls.alerts.length, 1);
+      assert.match(fixture.calls.alerts[0], /save dialog/i);
+      assert.match(fixture.calls.alerts[0], /No file was saved/);
+      assert.doesNotMatch(fixture.calls.alerts[0], /Check the selected snapshot/);
+      assert.equal(fixture.window.tools.children.find((node) => node.id === 'marginpack-tools-export').disabled, false);
+    } finally { fixture.controller.stop(); }
+  }
+});
+
+test('cancel and replacement do not inspect a native destination or attempt a write', async () => {
+  for (const result of [1, 2]) {
+    const fixture = harness({ pickerShow(picker) {
+      Object.defineProperty(picker, 'file', { get() { throw new Error('No destination should be read'); } });
+      return result;
+    } });
+    try {
+      assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'cancelled');
+      assert.equal(fixture.calls.writes.length, 0);
+      assert.equal(fixture.calls.alerts.length, result === 1 ? 0 : 1);
+      if (result === 2) assert.match(fixture.calls.alerts[0], /never replaces an existing file/);
+    } finally { fixture.controller.stop(); }
+  }
+});
+
+test('native paths are forwarded unchanged, including Unicode, spaces and platform separators', async () => {
+  // This tests adapter forwarding, not native Windows/Linux dialog behavior.
+  const destinations = [
+    '/synthetic/导出 文件/研究笔记 🦊.html',
+    String.raw`C:\Users\读者\Desktop\研究笔记 🦊.HTML`,
+    String.raw`\\server\共享\研究笔记.html`,
+    '/synthetic/exports/filename-without-extension',
+  ];
+  for (const pickerPath of destinations) {
+    const fixture = harness({ pickerPath });
+    try {
+      assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'saved');
+      assert.equal(fixture.calls.writes[0][0], pickerPath);
+      assert.equal(fixture.calls.writes[0][2].mode, 'create');
+      assert.equal(fixture.calls.pickers[0].defaultExtension, 'html');
+      assert.match(fixture.calls.pickers[0].defaultString, /\.html$/);
+    } finally { fixture.controller.stop(); }
+  }
+});
+
+test('unavailable selection or source never opens the save dialog', async () => {
+  const missingSource = attachment();
+  missingSource.getFilePathAsync = async () => null;
+  for (const fixture of [harness({ selected: [] }), harness({ snapshot: missingSource })]) {
+    try {
+      assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'error');
+      assert.equal(fixture.calls.pickers.length, 0);
+      assert.equal(fixture.calls.writes.length, 0);
+      assert.equal(fixture.calls.converted.length, 0);
+      assert.equal(fixture.calls.alerts.length, 1);
+    } finally { fixture.controller.stop(); }
+  }
+});
+
+test('a destination created after the native dialog is still refused without a retry or overwrite', async () => {
+  const fixture = harness({ writeUTF8(_path, _contents, options) {
+    assert.equal(options.mode, 'create');
+    throw new DOMException('Synthetic file won a creation race', 'NoModificationAllowedError');
+  } });
+  try {
+    assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'error');
+    assert.equal(fixture.calls.writes.length, 1, 'there is no retry in overwrite mode');
+    assert.match(fixture.calls.alerts[0], /already exists/);
+    assert.doesNotMatch(fixture.calls.alerts[0], /save dialog failed/);
+  } finally { fixture.controller.stop(); }
+});
+
+test('write failures keep destination feedback distinct from native dialog failures', async () => {
+  const fixture = harness({ writeUTF8() { throw new DOMException('Synthetic permissions failure', 'NotAllowedError'); } });
+  try {
+    assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'error');
+    assert.equal(fixture.calls.writes.length, 1);
+    assert.match(fixture.calls.alerts[0], /destination's permissions and free space/);
+    assert.doesNotMatch(fixture.calls.alerts[0], /save dialog failed/);
+  } finally { fixture.controller.stop(); }
+});
+
+test('shutdown while the native dialog is open cancels before writing or notifying', async () => {
+  let finishDialog;
+  let signalDialog;
+  const opened = new Promise((resolve) => { signalDialog = resolve; });
+  const result = new Promise((resolve) => { finishDialog = resolve; });
+  const fixture = harness({ pickerShow() { signalDialog(); return result; } });
+  const pending = fixture.controller.exportSelected(fixture.window);
+  await opened;
+  fixture.controller.stop();
+  finishDialog(0);
+  assert.equal((await pending).status, 'cancelled');
+  assert.equal(fixture.calls.writes.length, 0);
+  assert.equal(fixture.calls.alerts.length, 0);
 });

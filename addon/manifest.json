@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "MarginPack",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Export one saved HTML snapshot and its annotations to a standalone, read-only HTML file. Experimental Zotero 10 support.",
   "author": "MarginPack contributors",
   "applications": {

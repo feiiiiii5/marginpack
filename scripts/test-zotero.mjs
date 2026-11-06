@@ -1,23 +1,66 @@
 // Explicit, disposable application integration test. Never uses a default profile.
 import { mkdtemp, mkdir, readFile, writeFile, copyFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { spawn, spawnSync } from 'node:child_process';
 
 if (!process.env.ZOTERO_BIN) throw new Error('Set ZOTERO_BIN to a Zotero 10.0.x executable. No application is installed by this script.');
+const native = process.env.ZOTERO_NATIVE === '1';
+const mode = native ? 'native' : 'headless';
+const timeout = Number(process.env.ZOTERO_TEST_TIMEOUT_MS || (native ? 900000 : 300000));
+if (!Number.isSafeInteger(timeout) || timeout < 30000 || timeout > 1200000) {
+  throw new Error('ZOTERO_TEST_TIMEOUT_MS must be an integer from 30000 to 1200000.');
+}
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
+const xpi = resolve(root, `dist/marginpack-${pkg.version}.xpi`);
+await readFile(xpi); // Fail before creating a profile if the build is missing.
+const blocked = new Set([
+  'SSH_AUTH_SOCK', 'GH_TOKEN', 'GITHUB_TOKEN',
+  'GIT_ASKPASS', 'SSH_ASKPASS', 'SSH_ASKPASS_REQUIRE', 'GIT_SSH', 'GIT_SSH_COMMAND',
+  'ACTIONS_RUNTIME_TOKEN', 'ACTIONS_ID_TOKEN_REQUEST_TOKEN', 'ACTIONS_RUNTIME_URL',
+  'ACTIONS_ID_TOKEN_REQUEST_URL', 'ACTIONS_RESULTS_URL',
+  'HTTPS_PROXY', 'HTTP_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy',
+]);
+const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !blocked.has(key)));
+if (native) delete env.MOZ_HEADLESS;
+else env.MOZ_HEADLESS = '1';
+
 await mkdir(resolve(root, '.runtime'), { recursive: true });
+await mkdir(resolve(root, 'output'), { recursive: true });
 const run = await mkdtemp(resolve(root, '.runtime/zotero-test-'));
 const profile = resolve(run, 'profile'), data = resolve(run, 'data'), harness = resolve(run, 'harness');
-for (const dir of [profile, data, harness, resolve(profile, 'extensions')]) await mkdir(dir, { recursive: true });
-const resultFile = resolve(run, 'result.json');
-const exportFile = resolve(run, 'export.html');
-const sourceFile = resolve(run, 'source.html');
+const exportDirectory = resolve(run, '导出 空间 🦊');
+for (const directory of [profile, data, harness, exportDirectory, resolve(profile, 'extensions')]) {
+  await mkdir(directory, { recursive: true });
+}
+const config = {
+  mode, run, expectedAddonVersion: pkg.version, expectedVersion: process.env.ZOTERO_EXPECTED_VERSION || '10.0.7',
+  resultFile: resolve(run, 'result.json'),
+  progressFile: resolve(run, 'progress.json'),
+  latestFile: resolve(root, `.runtime/zotero-${mode}-latest.json`),
+  sourceFile: resolve(run, '原始 页面 🦊.html'),
+  exportFile: resolve(exportDirectory, '阅读笔记 中文 🦊.html'),
+  existingFile: resolve(exportDirectory, '已有 文件 保护 🦊.html'),
+  exportDirectory,
+};
+const stableResult = resolve(root, `output/zotero-${mode}-result.json`);
+const stableExport = resolve(root, `output/zotero-${mode}-export.html`);
+for (const filename of [stableResult, stableExport, resolve(root, `output/zotero-${mode}-log.txt`)]) {
+  await rm(filename, { force: true });
+}
 const source = '<!doctype html><html><head><title>Original synthetic study</title></head><body><h1>A saved reading</h1><p id="evidence">Portable notes retain their original context.</p><p>中文与 🦊 remain readable.</p></body></html>';
-await writeFile(sourceFile, source);
-await copyFile(resolve(root, `dist/marginpack-${pkg.version}.xpi`), resolve(profile, 'extensions/marginpack@marginpack.local.xpi'));
-await writeFile(resolve(harness, 'manifest.json'), JSON.stringify({ manifest_version: 2, name: 'Disposable MarginPack test harness', version: '1.0', applications: { zotero: { id: 'marginpack-test@marginpack.local', update_url: 'https://example.invalid/disposable-updates.json', strict_min_version: '10.0', strict_max_version: '10.0.*' } } }));
+await writeFile(config.sourceFile, source, 'utf8');
+await writeFile(config.existingFile, '<!doctype html><title>Existing synthetic file</title><p>Keep this sentinel unchanged: 中文 🦊.</p>', 'utf8');
+await copyFile(xpi, resolve(profile, 'extensions/marginpack@marginpack.local.xpi'));
+await writeFile(resolve(harness, 'manifest.json'), JSON.stringify({
+  manifest_version: 2, name: 'Disposable MarginPack test harness', version: '1.0',
+  applications: { zotero: {
+    id: 'marginpack-test@marginpack.local', update_url: 'https://example.invalid/disposable-updates.json',
+    strict_min_version: '10.0', strict_max_version: '10.0.*',
+  } },
+}));
+await copyFile(resolve(root, 'scripts/zotero-harness.js'), resolve(harness, 'bootstrap.js'));
 const prefs = {
   'extensions.autoDisableScopes': 0, 'extensions.startupScanScopes': 15,
   'extensions.sideloadScopes': 15, 'extensions.logging.enabled': true,
@@ -29,98 +72,122 @@ const prefs = {
   'extensions.zotero.httpServer.enabled': false, 'app.update.enabled': false,
   'extensions.update.enabled': false, 'datareporting.healthreport.uploadEnabled': false,
   'toolkit.telemetry.enabled': false, 'extensions.zotero.debug.log': true,
-  'marginpack.test.result': resultFile, 'marginpack.test.export': exportFile,
-  'marginpack.test.source': sourceFile, 'marginpack.test.bootstrap': pathToFileURL(resolve(root, 'addon/bootstrap.js')).href,
-  'marginpack.test.core': pathToFileURL(resolve(root, 'src')).href + '/'
+  'marginpack.test.config': JSON.stringify(config),
 };
-await writeFile(resolve(profile, 'user.js'), Object.entries(prefs).map(([k, v]) => `user_pref(${JSON.stringify(k)}, ${JSON.stringify(v)});`).join('\n'));
-await writeFile(resolve(harness, 'bootstrap.js'), `
-function startup() { void runChecks(); }
-async function runChecks() {
- const result = { checks: [], ok: false };
- const check = (name, condition) => { result.checks.push({name,passed:!!condition}); if (!condition) throw new Error(name); };
- try {
-  await Zotero.initializationPromise;
-  await Zotero.uiReadyPromise;
-  const win = Zotero.getMainWindow();
-  check('main window exists', !!win);
-  result.zoteroVersion = Zotero.version;
-  const {AddonManager} = ChromeUtils.importESModule('resource://gre/modules/AddonManager.sys.mjs');
-  const addon = await AddonManager.getAddonByID('marginpack@marginpack.local');
-  check('built XPI installed and active', !!addon?.isActive);
-  for (let i=0;i<50&&!win.document.getElementById('marginpack-tools-export');i++) await Zotero.Promise.delay(100);
-  check('production Tools menu registered', !!win.document.getElementById('marginpack-tools-export'));
-  check('production context menu registered', !!win.document.getElementById('marginpack-item-export'));
-  const sourcePath=Services.prefs.getStringPref('marginpack.test.source');
-  const before=await IOUtils.read(sourcePath);
-  const parent=new Zotero.Item('webpage'); parent.libraryID=Zotero.Libraries.userLibraryID; parent.setField('title','Original synthetic study'); await parent.saveTx();
-  const attachment=await Zotero.Attachments.importFromFile({file:sourcePath,parentItemID:parent.id,contentType:'text/html'});
-  attachment.setField('title','Original synthetic study'); attachment.setField('url','https://example.invalid/study'); await attachment.saveTx();
-  const attachmentBytes=await IOUtils.read(await attachment.getFilePathAsync());
-  const annotation=new Zotero.Item('annotation'); annotation.libraryID=Zotero.Libraries.userLibraryID; annotation.parentID=attachment.id;
-  annotation.annotationType='highlight'; annotation.annotationText='Portable notes retain their original context.';
-  annotation.annotationComment='This is an original synthetic integration-test comment.'; annotation.annotationColor='#ffd400';
-  annotation.annotationSortIndex='0000000'; annotation.annotationPosition=JSON.stringify({type:'CssSelector',value:'#evidence'});
-  await annotation.saveTx();
-  const aBefore=await Zotero.Annotations.toJSON(annotation);
-  // In headless Zotero the collection tree does not receive UI focus.
-  // Supply only the selection seam; all items, serialization and IO remain real.
-  const originalSelection=win.ZoteroPane.getSelectedItems;
-  win.ZoteroPane.getSelectedItems=()=>[attachment];
-  const outputPath=Services.prefs.getStringPref('marginpack.test.export');
-  class TestPicker { modeSave=1; returnOK=0; returnCancel=1; returnReplace=2; file=outputPath; init(){} appendFilter(){} async show(){return this.returnOK;} }
-  const alerts=[];
-  const scope={Zotero,Services,ChromeUtils,IOUtils};
-  Services.scriptloader.loadSubScript(Services.prefs.getStringPref('marginpack.test.bootstrap'),scope,'UTF-8');
-  const controller=scope.MarginPackAddon.createController({zotero:Zotero,services:{scriptloader:Services.scriptloader,prompt:{alert(...args){alerts.push(args[2]);}}},chromeUtils:{importESModule(){return {FilePicker:TestPicker};}},ioUtils:IOUtils});
-  controller.start(Services.prefs.getStringPref('marginpack.test.core'));
-  const exported=await controller.exportSelected(win);
-  result.exportStatus=exported.status; result.report=exported.report; result.alerts=alerts;
-  check('export saved through real IOUtils',exported.status==='saved'&&await IOUtils.exists(outputPath));
-  check('real serialized annotation located',exported.report?.total===1&&exported.report?.matched===1);
-  const exportedHTML=await IOUtils.readUTF8(outputPath);
-  check('standalone viewer contains synthetic comment',exportedHTML.includes('original synthetic integration-test comment'));
-  const again=await controller.exportSelected(win);
-  check('existing output not overwritten',again.status==='error'&&(await IOUtils.readUTF8(outputPath))===exportedHTML);
-  const after=await IOUtils.read(sourcePath);
-  check('source file bytes unchanged',before.length===after.length&&before.every((v,i)=>v===after[i]));
-  const attachmentAfter=await IOUtils.read(await attachment.getFilePathAsync());
-  check('stored attachment bytes unchanged',attachmentBytes.length===attachmentAfter.length&&attachmentBytes.every((v,i)=>v===attachmentAfter[i]));
-  const aAfter=await Zotero.Annotations.toJSON(await Zotero.Items.getAsync(annotation.id));
-  check('source annotation unchanged',JSON.stringify(aBefore)===JSON.stringify(aAfter));
-  controller.stop();
-  win.ZoteroPane.getSelectedItems=originalSelection;
-  check('production menu remains after test controller cleanup',win.document.querySelectorAll('#marginpack-tools-export').length===1);
-  result.ok=true;
- } catch(error) {result.error=String(error); result.stack=error.stack;}
- finally {
-  await IOUtils.writeUTF8(Services.prefs.getStringPref('marginpack.test.result'),JSON.stringify(result,null,2));
-  Services.startup.quit(Ci.nsIAppStartup.eForceQuit);
- }
+await writeFile(resolve(profile, 'user.js'), Object.entries(prefs).map(([key, value]) => `user_pref(${JSON.stringify(key)}, ${JSON.stringify(value)});`).join('\n'));
+
+const zipProgram = 'import pathlib,sys,zipfile\np=pathlib.Path(sys.argv[1])\nwith zipfile.ZipFile(sys.argv[2],"w",zipfile.ZIP_DEFLATED) as z:\n for f in sorted(p.iterdir()): z.write(f,f.name)\n';
+const pythonCandidates = process.env.PYTHON
+  ? [[process.env.PYTHON, []]]
+  : process.platform === 'win32' ? [['python', []], ['py', ['-3']], ['python3', []]] : [['python3', []], ['python', []]];
+let packaged = false;
+for (const [python, prefix] of pythonCandidates) {
+  const result = spawnSync(python, [...prefix, '-c', zipProgram, harness, resolve(profile, 'extensions/marginpack-test@marginpack.local.xpi')], {
+    env, timeout: 60000, encoding: 'utf8', windowsHide: true,
+  });
+  if (result.error?.code === 'ENOENT') continue;
+  if (result.status !== 0) throw new Error(`Could not package disposable test harness: ${result.stderr || result.error || result.status}`);
+  packaged = true;
+  break;
 }
-function install(){} function shutdown(){} function uninstall(){}
-`);
-const harnessZip=spawnSync('python3',['-c','import pathlib,sys,zipfile\np=pathlib.Path(sys.argv[1])\nwith zipfile.ZipFile(sys.argv[2],"w",zipfile.ZIP_DEFLATED) as z:\n for f in p.iterdir(): z.write(f,f.name)\n',harness,resolve(profile,'extensions/marginpack-test@marginpack.local.xpi')],{stdio:'inherit'});
-if(harnessZip.status!==0) throw new Error('Could not package disposable test harness');
-const blocked = new Set(['SSH_AUTH_SOCK','GH_TOKEN','GITHUB_TOKEN','HTTPS_PROXY','HTTP_PROXY','http_proxy','https_proxy','ALL_PROXY','all_proxy']);
-const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !blocked.has(key)));
-const child = spawn(process.env.ZOTERO_BIN, ['-no-remote', '-profile', profile, '-datadir', data, '-purgecaches', '-headless'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
-let logs = ''; let startupLogs = '';
+if (!packaged) throw new Error('Python 3 is required to package the disposable test harness. Set PYTHON if it is not on PATH.');
+
+const descriptor = { ...config, phase: 'launching', finished: false, stableResult, stableExport };
+await writeFile(config.latestFile, JSON.stringify(descriptor, null, 2));
+console.log('MARGINPACK_RUN ' + JSON.stringify(descriptor));
+const args = ['-no-remote', '-profile', profile, '-datadir', data, '-purgecaches'];
+if (!native) args.push('-headless');
+const child = spawn(process.env.ZOTERO_BIN, args, {
+  env, cwd: run, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: !native,
+  detached: process.platform !== 'win32',
+});
+let logs = '', startupLogs = '', timedOut = false, interrupted = false;
+let exitResolve;
+const exited = new Promise(resolveExit => { exitResolve = resolveExit; });
+let exitState;
+child.on('error', error => { exitState = { error: String(error) }; exitResolve(); });
+child.on('exit', (code, signal) => { exitState = { code, signal }; exitResolve(); });
 for (const stream of [child.stdout, child.stderr]) stream.on('data', chunk => {
   const text = chunk.toString();
-  logs = (logs + text).slice(-16000); if(startupLogs.length<30000) startupLogs+=text;
-  const useful=text.split('\n').filter(line=>/Calling bootstrap|plugin marginpack|applications.zotero|Extension is invalid|Error running bootstrap|MARGINPACK_TEST/.test(line));
-  if(useful.length) process.stdout.write(useful.join('\n').slice(-2000)+'\n');
+  logs = (logs + text).slice(-24000);
+  if (startupLogs.length < 30000) startupLogs = (startupLogs + text).slice(0, 30000);
+  const useful = text.split('\n').filter(line => /Calling bootstrap|plugin marginpack|applications.zotero|Extension is invalid|Error running bootstrap|MARGINPACK_TEST/.test(line));
+  if (useful.length) process.stdout.write(useful.join('\n').slice(-4000) + '\n');
 });
-const timer = setTimeout(() => child.kill('SIGTERM'), 180000);
+
+let stopping;
+function stopChild() {
+  if (stopping) return stopping;
+  stopping = (async () => {
+    if (!child.pid) return;
+    if (exitState) {
+      // A graceful application exit normally stops content processes. Dispose
+      // any remaining members of this test's Unix process group as well.
+      if (process.platform !== 'win32') {
+        try { process.kill(-child.pid, 'SIGTERM'); } catch (_) {}
+      }
+      return;
+    }
+    if (process.platform === 'win32') {
+      // Zotero has content processes. Stop only this test's process tree.
+      await new Promise(done => {
+        const killer = spawn('taskkill', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+        const timer = setTimeout(() => { killer.kill(); done(); }, 15000);
+        killer.on('error', () => { clearTimeout(timer); child.kill(); done(); });
+        killer.on('exit', () => { clearTimeout(timer); done(); });
+      });
+    } else {
+      try { process.kill(-child.pid, 'SIGTERM'); } catch (_) { child.kill('SIGTERM'); }
+      await Promise.race([exited, new Promise(done => setTimeout(done, 3000))]);
+      if (!exitState) {
+        try { process.kill(-child.pid, 'SIGKILL'); } catch (_) { child.kill('SIGKILL'); }
+      }
+    }
+  })();
+  return stopping;
+}
+const onSignal = () => { interrupted = true; void stopChild(); };
+process.on('SIGINT', onSignal);
+process.on('SIGTERM', onSignal);
+const timer = setTimeout(() => { timedOut = true; void stopChild(); }, timeout);
+let successful = false;
 try {
-  await new Promise((done, reject) => { child.on('error', reject); child.on('exit', done); });
+  await exited;
   let result;
-  try { result = JSON.parse(await readFile(resultFile, 'utf8')); }
-  catch { throw new Error('Application did not write a test result.\n' + startupLogs.slice(0,30000)); }
-  console.log(JSON.stringify(result, null, 2));
+  try { result = JSON.parse(await readFile(config.resultFile, 'utf8')); }
+  catch (_) {
+    result = {
+      mode, ok: false, finished: true, phase: 'failed',
+      error: timedOut ? `Application test exceeded ${timeout} ms.` : interrupted ? 'Application test was interrupted.' : 'Application did not write a test result.',
+      process: exitState,
+    };
+  }
+  if (timedOut || interrupted || exitState?.error || (exitState?.code !== 0 && exitState?.code !== undefined)) {
+    result.ok = false;
+    result.process = exitState;
+    if (!result.error) result.error = timedOut ? 'Application test timed out.' : interrupted ? 'Application test interrupted.' : 'Application process exited unsuccessfully.';
+  }
+  result.mode = mode;
+  result.finished = true;
+  if (result.ok) {
+    try {
+      await copyFile(config.exportFile, stableExport);
+      successful = true;
+    } catch (error) {
+      result.ok = false;
+      result.error = 'Could not retain the verified export: ' + String(error);
+    }
+  }
   if (!result.ok) process.exitCode = 1;
-  else await copyFile(exportFile, resolve(root, 'output/zotero-integration-export.html')).catch(async () => { await mkdir(resolve(root, 'output'), {recursive:true}); await copyFile(exportFile,resolve(root,'output/zotero-integration-export.html')); });
-} finally { clearTimeout(timer); if (child.exitCode===null) child.kill('SIGTERM'); }
-// Successful disposable profiles contain only synthetic data and are removed.
-if (!process.exitCode) await rm(run, {recursive:true});
+  await writeFile(stableResult, JSON.stringify(result, null, 2));
+  await writeFile(resolve(root, `output/zotero-${mode}-log.txt`), startupLogs + '\n--- bounded final output ---\n' + logs);
+  console.log(JSON.stringify(result, null, 2));
+  await writeFile(config.latestFile, JSON.stringify({ ...descriptor, phase: result.ok ? 'finished' : 'failed', finished: true, ok: result.ok, resultFile: stableResult, exportFile: result.ok ? stableExport : config.exportFile, error: result.error }, null, 2));
+} finally {
+  clearTimeout(timer);
+  process.removeListener('SIGINT', onSignal);
+  process.removeListener('SIGTERM', onSignal);
+  await stopChild();
+}
+// Successful profiles contain only synthetic data. Keep failures for diagnosis.
+if (successful) await rm(run, { recursive: true, maxRetries: 5, retryDelay: 500 });

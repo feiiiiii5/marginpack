@@ -18,8 +18,16 @@ for (const [from, to] of [['addon/manifest.json', 'manifest.json'], ['addon/boot
 }
 const name = `marginpack-${pkg.version}.xpi`;
 const code = `import pathlib,sys,zipfile\nsrc=pathlib.Path(sys.argv[1])\nwith zipfile.ZipFile(sys.argv[2],'w',compression=zipfile.ZIP_DEFLATED) as z:\n for p in sorted(src.iterdir()):\n  i=zipfile.ZipInfo(p.name,(2026,1,1,0,0,0)); i.compress_type=zipfile.ZIP_DEFLATED; i.external_attr=0o100644<<16; z.writestr(i,p.read_bytes())\n`;
-const result = spawnSync('python3', ['-c', code, stage, resolve(dist, name)], { stdio: 'inherit' });
-if (result.status !== 0) throw new Error('XPI packaging failed');
+const pythonCandidates = process.platform === 'win32' ? [['python', []], ['py', ['-3']], ['python3', []]] : [['python3', []], ['python', []]];
+let packaged = false;
+for (const [python, prefix] of pythonCandidates) {
+  const result = spawnSync(python, [...prefix, '-c', code, stage, resolve(dist, name)], { stdio: 'inherit', timeout: 60000 });
+  if (result.error?.code === 'ENOENT') continue;
+  if (result.status !== 0) throw new Error('XPI packaging failed');
+  packaged = true;
+  break;
+}
+if (!packaged) throw new Error('Python 3 is required to build the XPI');
 const bytes = await readFile(resolve(dist, name));
 const digest = createHash('sha256').update(bytes).digest('hex');
 const updates = { addons: { [manifest.applications.zotero.id]: { updates: [{ version: pkg.version, update_link: `https://github.com/feiiiiii5/marginpack/releases/download/v${pkg.version}/${name}`, update_hash: `sha256:${digest}`, applications: { zotero: { strict_min_version: '10.0', strict_max_version: '10.0.*' } } }] } } };
