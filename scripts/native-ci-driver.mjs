@@ -159,18 +159,21 @@ for($attempt=0;$attempt -lt 2;$attempt++){
 if($copied -ne [string]$config.path){throw ('Native Windows filename entry did not match requested path: '+$copied)}
 [System.Windows.Forms.SendKeys]::SendWait('%s')
 if($config.action -eq 'replace'){
- $deadline=(Get-Date).AddSeconds(30); $yes=$null
+ $deadline=(Get-Date).AddSeconds(30); $yes=$null; $confirmation=$null; $seen=@()
  while((Get-Date)-lt $deadline){
   $windows=$root.FindAll([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.Condition]::TrueCondition)
   foreach($window in $windows){
-   if($window.Current.ProcessId -ne $dialogProcess){continue}
+   $caption=$window.Current.Name
+   if($window.Current.ProcessId -ne $dialogProcess -and $caption -notmatch 'Confirm.*Save|Save.*As|MarginPack'){continue}
+   $seen += ($window.Current.ProcessId.ToString()+':'+$caption)
    $buttons=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
-   foreach($button in $buttons){if($button.Current.Name -match '^(&)?Yes$|^Replace$'){ $yes=$button; break }}
+   foreach($button in $buttons){if($button.Current.Name.Trim().Replace('&','').Replace('_','') -match '^(Yes|Replace)(\b|$)' -or ($caption -match 'Confirm' -and $button.Current.AutomationId -eq '6')){ $yes=$button; $confirmation=$window; break }}
    if($yes){break}
   }
   if($yes){break}; Start-Sleep -Milliseconds 250
  }
- if(-not $yes){throw 'Windows replacement confirmation did not appear'}
+ if(-not $yes){throw ('Windows replacement confirmation did not appear; candidate windows: '+(($seen|Select-Object -Unique)-join '; '))}
+ [void][NativeDialogFocus]::SetForegroundWindow([IntPtr]$confirmation.Current.NativeWindowHandle)
  $invoke=$null
  if($yes.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invoke)){$invoke.Invoke()}
  elseif($yes.Current.Name -match 'Yes'){[System.Windows.Forms.SendKeys]::SendWait('%y')}
