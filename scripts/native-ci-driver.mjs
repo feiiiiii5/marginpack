@@ -113,7 +113,7 @@ Add-Type @'
 using System; using System.Runtime.InteropServices;
 public static class NativeDialogFocus {
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
- [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h,string text);
+ [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageW")] public static extern IntPtr SetFileName(IntPtr h,uint m,IntPtr w,string text);
  [DllImport("user32.dll", EntryPoint="SendMessageW")] public static extern IntPtr ClickButton(IntPtr h,uint m,IntPtr w,IntPtr l);
 }
 '@
@@ -146,7 +146,7 @@ $valuePattern=$null
 if($filename.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valuePattern)){
  $valuePattern.SetValue([string]$config.path)
 }elseif($filename.Current.NativeWindowHandle -ne 0){
- if(-not [NativeDialogFocus]::SetWindowText([IntPtr]$filename.Current.NativeWindowHandle,[string]$config.path)){throw 'Native filename edit rejected WM_SETTEXT'}
+ if([NativeDialogFocus]::SetFileName([IntPtr]$filename.Current.NativeWindowHandle,0x000C,[IntPtr]::Zero,[string]$config.path) -eq [IntPtr]::Zero){throw 'Native filename edit rejected WM_SETTEXT'}
 }else{throw 'Native filename control has no writable value or window handle'}
 try{$filename.SetFocus()}catch{}
 [System.Windows.Forms.SendKeys]::SendWait('{TAB}')
