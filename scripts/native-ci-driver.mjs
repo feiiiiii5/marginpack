@@ -113,8 +113,6 @@ Add-Type @'
 using System; using System.Runtime.InteropServices;
 public static class NativeDialogFocus {
  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
- [DllImport("user32.dll", CharSet=CharSet.Unicode, EntryPoint="SendMessageW")] public static extern IntPtr SetFileName(IntPtr h,uint m,IntPtr w,string text);
- [DllImport("user32.dll", EntryPoint="SendMessageW")] public static extern IntPtr ClickButton(IntPtr h,uint m,IntPtr w,IntPtr l);
 }
 '@
 $config = Get-Content -Raw -Encoding UTF8 -LiteralPath $env:MARGINPACK_NATIVE_ACTION | ConvertFrom-Json
@@ -142,14 +140,23 @@ while((Get-Date)-lt $deadline){
  if($filename){break}; Start-Sleep -Milliseconds 250
 }
 if(-not $filename){throw 'Native FileNameControlHost child 1001 was not found'}
-$valuePattern=$null
-if($filename.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valuePattern)){
- $valuePattern.SetValue([string]$config.path)
-}elseif($filename.Current.NativeWindowHandle -ne 0){
- if([NativeDialogFocus]::SetFileName([IntPtr]$filename.Current.NativeWindowHandle,0x000C,[IntPtr]::Zero,[string]$config.path) -eq [IntPtr]::Zero){throw 'Native filename edit rejected WM_SETTEXT'}
-}else{throw 'Native filename control has no writable value or window handle'}
-try{$filename.SetFocus()}catch{}
-[System.Windows.Forms.SendKeys]::SendWait('{TAB}')
+$copied=''
+for($attempt=0;$attempt -lt 2;$attempt++){
+ try{$filename.SetFocus()}catch{}
+ [System.Windows.Forms.SendKeys]::SendWait('%n')
+ Start-Sleep -Milliseconds 200
+ [System.Windows.Forms.SendKeys]::SendWait('^a')
+ [System.Windows.Forms.Clipboard]::SetText([string]$config.path)
+ [System.Windows.Forms.SendKeys]::SendWait('^v')
+ Start-Sleep -Milliseconds 300
+ [System.Windows.Forms.Clipboard]::SetText('marginpack-native-copy-not-completed')
+ [System.Windows.Forms.SendKeys]::SendWait('^a')
+ [System.Windows.Forms.SendKeys]::SendWait('^c')
+ Start-Sleep -Milliseconds 250
+ $copied=[System.Windows.Forms.Clipboard]::GetText()
+ if($copied -eq [string]$config.path){break}
+}
+if($copied -ne [string]$config.path){throw ('Native Windows filename entry did not match requested path: '+$copied)}
 [System.Windows.Forms.SendKeys]::SendWait('%s')
 if($config.action -eq 'replace'){
  $deadline=(Get-Date).AddSeconds(30); $yes=$null
@@ -166,8 +173,9 @@ if($config.action -eq 'replace'){
  if(-not $yes){throw 'Windows replacement confirmation did not appear'}
  $invoke=$null
  if($yes.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invoke)){$invoke.Invoke()}
- elseif($yes.Current.NativeWindowHandle -ne 0){[void][NativeDialogFocus]::ClickButton([IntPtr]$yes.Current.NativeWindowHandle,0x00F5,[IntPtr]::Zero,[IntPtr]::Zero)}
- else{throw 'Native replacement button cannot be invoked'}
+ elseif($yes.Current.Name -match 'Yes'){[System.Windows.Forms.SendKeys]::SendWait('%y')}
+ else{[System.Windows.Forms.SendKeys]::SendWait('%r')}
+
 }
 Write-Output ('Operated real Windows save dialog: '+$config.action)
 `;
@@ -178,7 +186,7 @@ async function windowsAction(action, path) {
   process.env.MARGINPACK_NATIVE_ACTION = config;
   try {
     const encoded = Buffer.from(powershell, 'utf16le').toString('base64');
-    const output = await command('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]);
+    const output = await command('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', encoded]);
     return { window: saveTitle, action, pathSuppliedThrough: 'Windows native filename control', output: output.trim() };
   } finally {
     if (previous === undefined) delete process.env.MARGINPACK_NATIVE_ACTION;
