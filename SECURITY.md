@@ -1,5 +1,7 @@
 # Security and privacy
 
+Development was discontinued on 2026-11-06. This document describes the last release; there is no ongoing security maintenance or response commitment. See the [project decision](docs/CLOSEOUT.md).
+
 MarginPack is a local exporter. It needs no account, API key, model or hosted service. The Zotero adapter reads the selected attachment and its annotations through Zotero APIs; it does not read SQLite directly, sync a library or modify source items.
 
 A Zotero plugin has broad application access. Review the source and install the release only if you trust it. MarginPack's limited actions are an application design boundary, not a sandbox imposed on Zotero plugins.

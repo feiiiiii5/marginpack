@@ -1,5 +1,11 @@
 # MarginPack
 
+## Project status
+
+Development was discontinued on 2026-11-06 after product review. Do not resume implementation, dependency installation, test runs, CI reruns, releases or promotion without a new explicit instruction from the owner. Preserve the published code, releases and historical validation evidence. The commands below and in other documents describe the historical development workflow, not an active work queue. See `docs/CLOSEOUT.md`.
+
+## Historical development boundaries
+
 Independent open-source product. Keep work within this repository. Never read a user's Zotero database or library without an explicit test profile. Runtime data, downloaded applications, node_modules and test profiles are ignored.
 
 The product reads an existing single-file HTML snapshot plus Zotero's annotation JSON and creates one standalone, read-only HTML. Source snapshots and annotations must never be modified. No model, account, telemetry or network service is needed. Preserve original annotation counts; unsupported, mismatched and unresolved items must be visible and must not be silently guessed.

@@ -1,5 +1,7 @@
 # Community announcement material
 
+**Historical drafts only.** Development and promotion were discontinued on 2026-11-06. Do not post the text below or resume channel setup. No Zotero Forums or X announcement was published. See the [project decision](CLOSEOUT.md).
+
 The text below describes the released product and its limits. Check the latest release and search the target community for an existing MarginPack thread before posting. Keep one relevant announcement thread and follow replies there; do not repeat advertisements in old feature-request threads or solicit stars through unsolicited messages. Follow each community’s current contribution and AI-assistance rules.
 
 ## Zotero Forums

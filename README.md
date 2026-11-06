@@ -1,5 +1,7 @@
 # MarginPack
 
+**Development discontinued on 2026-11-06.** No further features, releases, compatibility testing or promotion are planned. Version 0.1.2 and the source remain available as historical work, without a maintenance commitment. Read the [decision and product review](docs/CLOSEOUT.md) before installing or contributing.
+
 **Export your existing Zotero webpage annotations as one offline HTML file.**
 
 Keep the saved page, highlights and comments together. The recipient opens the file in a browser, clicks a note and reads it in its original context. No Zotero installation, account or hosted viewer is required to read the export.

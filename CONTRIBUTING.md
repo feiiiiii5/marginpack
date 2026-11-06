@@ -1,5 +1,7 @@
 # Contributing
 
+Development was discontinued on 2026-11-06. No further review, fixes or releases are scheduled; the instructions below are retained for people studying or independently using the code. See the [project decision](docs/CLOSEOUT.md).
+
 Report a reproducible problem, request a supported export shape, or send a focused pull request. Start with the current release and include the Zotero version, operating system, browser and the exact action that failed.
 
 Do not upload a personal library, login credentials, private notes or copyrighted snapshots. A small original HTML example and synthetic annotation JSON are usually enough. Keep unresolved annotations visible when a selector cannot be recovered; do not make an export look complete by dropping records.
