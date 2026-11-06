@@ -1,7 +1,16 @@
 name: Validate MarginPack
 on:
   push:
+    branches: ['**']
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'updates.json'
   pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '*.md'
+      - 'updates.json'
 permissions:
   contents: read
 jobs:
@@ -12,6 +21,8 @@ jobs:
         os: [ubuntu-24.04, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.runtime/playwright
     defaults:
       run:
         shell: bash
@@ -24,6 +35,17 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci --ignore-scripts
+      - name: Reuse the locked browser binaries
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ env.PLAYWRIGHT_BROWSERS_PATH }}
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Use the canonical Ubuntu package mirror
+        if: runner.os == 'Linux'
+        run: |
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            printf '%s\n' 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt >/dev/null
+          fi
       - run: npx playwright install --with-deps chromium firefox
       - run: npm run check
       - run: npm test
