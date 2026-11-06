@@ -20,7 +20,7 @@ async function runChecks() {
   async function progress(phase, extra = {}) {
     result.phase = phase;
     result.phases.push({ phase, at: new Date().toISOString() });
-    const value = JSON.stringify({ ...config, phase, finished: false, checks: result.checks, alerts: result.alerts, ...extra }, null, 2);
+    const value = JSON.stringify({ ...config, applicationPID: Services.appinfo.processID, phase, finished: false, checks: result.checks, alerts: result.alerts, ...extra }, null, 2);
     await IOUtils.writeUTF8(config.progressFile, value, { tmpPath: config.progressFile + ".tmp" });
     await IOUtils.writeUTF8(config.latestFile, value, { tmpPath: config.latestFile + ".tmp" });
     Zotero.debug("MARGINPACK_TEST " + phase);
@@ -29,6 +29,7 @@ async function runChecks() {
     await progress("initializing");
     await Zotero.initializationPromise;
     await Zotero.uiReadyPromise;
+    if (native) await Zotero.Promise.delay(3000);
     win = Zotero.getMainWindow();
     check("main window exists", Boolean(win));
     result.zoteroVersion = Zotero.version;
@@ -109,7 +110,13 @@ async function runChecks() {
         prompt: { alert(_window, _title, message) { result.alerts.push(String(message)); } },
       },
       chromeUtils: native ? ChromeUtils : { importESModule() { return { FilePicker: TestPicker }; } },
-      ioUtils: IOUtils,
+      ioUtils: {
+        read: (...args) => IOUtils.read(...args),
+        writeUTF8: (...args) => {
+          (result.destinationWriteAttempts ||= []).push(args[0]);
+          return IOUtils.writeUTF8(...args);
+        },
+      },
     });
     controller.start(rootURI);
     result.pickerMode = native ? "real-native-filepicker" : "deterministic-picker-seam";

@@ -54,8 +54,9 @@ async function gtkAction(action, path) {
     return { window: saveTitle, action };
   }
   await command('xdotool', ['key', '--clearmodifiers', 'ctrl+l']);
-  // Keep xclip in the foreground, serving exactly one clipboard request.
-  const clipboard = spawn('xclip', ['-selection', 'clipboard', '-in', '-loops', '1', '-quiet'], { stdio: ['pipe', 'ignore', 'ignore'] });
+  // GTK requests clipboard formats before requesting UTF-8 text. Keep the
+  // owner alive through that negotiation, with bounded cleanup below.
+  const clipboard = spawn('xclip', ['-selection', 'clipboard', '-in', '-loops', '0', '-quiet', '-target', 'UTF8_STRING'], { stdio: ['pipe', 'ignore', 'ignore'] });
   const clipboardExit = new Promise(done => { clipboard.on('exit', done); clipboard.on('error', done); });
   clipboard.stdin.end(path);
   try {
@@ -96,6 +97,7 @@ $condition = New-Object System.Windows.Automation.PropertyCondition([System.Wind
 $deadline=(Get-Date).AddSeconds(60); $dialog=$null
 while((Get-Date)-lt $deadline){
  $dialog=$root.FindFirst([System.Windows.Automation.TreeScope]::Children,$condition)
+ if(-not $dialog){$dialog=$root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)}
  if($dialog){break}; Start-Sleep -Milliseconds 250
 }
 if(-not $dialog){throw 'Native Windows save dialog was not visible'}
@@ -113,6 +115,7 @@ if(-not $filename){throw 'Native File name edit was not found'}
 $pattern=$filename.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
 $pattern.SetValue([string]$config.path)
 $filename.SetFocus()
+[System.Windows.Forms.SendKeys]::SendWait('{TAB}')
 [System.Windows.Forms.SendKeys]::SendWait('%s')
 if($config.action -eq 'replace'){
  $deadline=(Get-Date).AddSeconds(30); $yes=$null

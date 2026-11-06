@@ -97,7 +97,13 @@ await writeFile(config.latestFile, JSON.stringify(descriptor, null, 2));
 console.log('MARGINPACK_RUN ' + JSON.stringify(descriptor));
 const args = ['-no-remote', '-profile', profile, '-datadir', data, '-purgecaches'];
 if (!native) args.push('-headless');
-const child = spawn(process.env.ZOTERO_BIN, args, {
+if (native && process.platform === 'win32') args.push('-wait-for-browser');
+const macNative = native && process.platform === 'darwin';
+const appBundle = resolve(process.env.ZOTERO_BIN, '../../..');
+const launchArgs = macNative
+  ? ['-n', '-W', ...[...blocked, 'MOZ_HEADLESS'].flatMap(key => ['--env', key + '=']), appBundle, '--args', ...args]
+  : args;
+const child = spawn(macNative ? '/usr/bin/open' : process.env.ZOTERO_BIN, launchArgs, {
   env, cwd: run, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: !native,
   detached: process.platform !== 'win32',
 });
@@ -120,6 +126,18 @@ function stopChild() {
   if (stopping) return stopping;
   stopping = (async () => {
     if (!child.pid) return;
+    if (macNative && !exitState) {
+      // LaunchServices gives open -W a different PID. Match only this fresh
+      // profile's binary invocation when stopping a timed-out native test.
+      const listing = spawnSync('ps', ['-axo', 'pid=,command='], {env, encoding:'utf8', timeout:5000});
+      const prefix = process.env.ZOTERO_BIN + ' ' + args.join(' ');
+      for (const line of (listing.stdout || '').split('\n')) {
+        const match = /^\s*(\d+)\s+(.+)$/.exec(line);
+        if (match && match[2] === prefix) {
+          try { process.kill(Number(match[1]), 'SIGTERM'); } catch (_) {}
+        }
+      }
+    }
     if (exitState) {
       // A graceful application exit normally stops content processes. Dispose
       // any remaining members of this test's Unix process group as well.
