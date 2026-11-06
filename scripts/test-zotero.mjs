@@ -6,11 +6,14 @@ import { spawn, spawnSync } from 'node:child_process';
 
 if (!process.env.ZOTERO_BIN) throw new Error('Set ZOTERO_BIN to a Zotero 10.0.x executable. No application is installed by this script.');
 const native = process.env.ZOTERO_NATIVE === '1';
-const mode = native ? 'native' : 'headless';
-const timeout = Number(process.env.ZOTERO_TEST_TIMEOUT_MS || (native ? 900000 : 300000));
+const productionMenu = process.env.ZOTERO_PRODUCTION_MENU === '1';
+if (productionMenu && !native) throw new Error('ZOTERO_PRODUCTION_MENU=1 requires ZOTERO_NATIVE=1; its dialogs must be operated on the native application.');
+const mode = productionMenu ? 'production' : native ? 'native' : 'headless';
+const timeout = Number(process.env.ZOTERO_TEST_TIMEOUT_MS || (productionMenu ? 300000 : native ? 900000 : 300000));
 if (!Number.isSafeInteger(timeout) || timeout < 30000 || timeout > 1200000) {
   throw new Error('ZOTERO_TEST_TIMEOUT_MS must be an integer from 30000 to 1200000.');
 }
+if (productionMenu && timeout > 300000) throw new Error('The production-menu smoke check is bounded to at most 300000 ms.');
 const root = fileURLToPath(new URL('..', import.meta.url));
 const pkg = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8'));
 const xpi = resolve(root, `dist/marginpack-${pkg.version}.xpi`);
@@ -35,7 +38,7 @@ for (const directory of [profile, data, harness, exportDirectory, resolve(profil
   await mkdir(directory, { recursive: true });
 }
 const config = {
-  mode, run, expectedAddonVersion: pkg.version, expectedVersion: process.env.ZOTERO_EXPECTED_VERSION || '10.0.7',
+  mode, productionMenu, run, expectedAddonVersion: pkg.version, expectedVersion: process.env.ZOTERO_EXPECTED_VERSION || '10.0.7',
   resultFile: resolve(run, 'result.json'),
   progressFile: resolve(run, 'progress.json'),
   latestFile: resolve(root, `.runtime/zotero-${mode}-latest.json`),
@@ -49,7 +52,10 @@ const stableExport = resolve(root, `output/zotero-${mode}-export.html`);
 for (const filename of [stableResult, stableExport, resolve(root, `output/zotero-${mode}-log.txt`)]) {
   await rm(filename, { force: true });
 }
-const source = '<!doctype html><html><head><title>Original synthetic study</title></head><body><h1>A saved reading</h1><p id="evidence">Portable notes retain their original context.</p><p>中文与 🦊 remain readable.</p></body></html>';
+// Original content exercises the rendered quotes and UTF-16 positions that
+// Zotero's installed snapshot reader actually generates, not hand-written
+// selectors designed around the exporter.
+const source = '<!doctype html><html><head><title>Original synthetic study</title></head><body><h1>A saved reading</h1><p id="evidence">Portable notes<br>retain their original context. 中文 🦊</p><section id="cross-paragraph"><p id="first-paragraph">Before Alpha</p><p id="second-paragraph">Beta after</p></section><p>中文与 🦊 remain readable.</p></body></html>';
 await writeFile(config.sourceFile, source, 'utf8');
 await writeFile(config.existingFile, '<!doctype html><title>Existing synthetic file</title><p>Keep this sentinel unchanged: 中文 🦊.</p>', 'utf8');
 await copyFile(xpi, resolve(profile, 'extensions/marginpack@marginpack.local.xpi'));

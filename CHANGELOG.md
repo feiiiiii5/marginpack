@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.2 — 2026-11-06
+
+- Verify rendered quotations spanning BRs and semantic block boundaries against their exact original UTF-16 range. Keep changed inline word boundaries unresolved; do not search for a replacement location.
+- Preserve offline section/footnote navigation, Unicode IDs, legacy named anchors and source language/right-to-left reading direction. Restore the originating link's keyboard focus after closing an external-link preview.
+- Suggest a portable title-based export filename while retaining exclusive creation and replacement refusal.
+- Add an opt-in troubleshooting summary that excludes source content, metadata, IDs, selector data and source hashes; copying is manual and nothing is sent.
+- Add English/Chinese first-export and troubleshooting guides, including private-content and printing limits.
+- Expand browser regressions and application verification to use annotations serialized by the installed snapshot reader. See [validation](docs/VALIDATION.md) for actual results, environments and remaining test seams.
+
 ## 0.1.1 — 2026-11-06
 
 - Explain a failure to initialize or open the system save dialog without blaming the selected snapshot. No output file is written in this case.

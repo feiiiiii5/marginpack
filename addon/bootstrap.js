@@ -55,6 +55,25 @@ var MarginPackAddon = (() => {
     return title || "Saved webpage";
   }
 
+  function exportFilename(title) {
+    let name = safeTitle(title).replace(/\.html?$/i, "")
+      .replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g, "-")
+      .replace(/\s+/g, " ").replace(/^[. ]+|[. ]+$/g, "");
+    let portable = "", bytes = 0, characters = 0;
+    for (const character of name) {
+      const point = character.codePointAt(0);
+      const length = point < 0x80 ? 1 : point < 0x800 ? 2 : point < 0x10000 ? 3 : 4;
+      if (bytes + length > 180 || characters >= 80) break;
+      portable += point >= 0xd800 && point <= 0xdfff ? "\ufffd" : character;
+      bytes += length;
+      characters++;
+    }
+    name = portable.replace(/[. ]+$/g, "");
+    if (!name) name = "Saved webpage";
+    if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)) name = "Snapshot-" + name;
+    return name + "-marginpack.html";
+  }
+
   async function readSnapshot(zotero, attachment, URLClass, ioUtils, TextDecoderClass) {
     const path = await attachment.getFilePathAsync();
     if (!path) {
@@ -182,7 +201,7 @@ var MarginPackAddon = (() => {
           picker.init(window, "Save MarginPack export as a new HTML file", picker.modeSave);
           picker.appendFilter("HTML document", "*.html");
           picker.defaultExtension = "html";
-          picker.defaultString = "annotated-snapshot-marginpack.html";
+          picker.defaultString = exportFilename(input.metadata.title);
           result = await picker.show();
         } catch (_) {
           throw new ExportError("The system save dialog failed. No file was saved. Try exporting again.");

@@ -4,7 +4,7 @@
 
 Keep the saved page, highlights and comments together. The recipient opens the file in a browser, clicks a note and reads it in its original context. No Zotero installation, account or hosted viewer is required to read the export.
 
-[Download the latest release](https://github.com/feiiiiii5/marginpack/releases) · [中文说明](README.zh-CN.md) · [Open a problem report](https://github.com/feiiiiii5/marginpack/issues/new/choose)
+[Download the latest release](https://github.com/feiiiiii5/marginpack/releases) · [First export & troubleshooting](docs/QUICKSTART.md) · [中文说明](README.zh-CN.md) · [Open a problem report](https://github.com/feiiiiii5/marginpack/issues/new/choose)
 
 ![MarginPack's offline reader with the original page and annotation sidebar](docs/demo.png)
 
@@ -14,19 +14,23 @@ Keep the saved page, highlights and comments together. The recipient opens the f
 - Preserves text context, annotation colors, quotes, comments and tags in a standalone reader.
 - Shows an outcome for every annotation: matched, unresolved or unsupported. A changed quote is never silently relocated.
 - Lets the recipient jump to a highlighted passage and toggle highlights.
+- Keeps saved-page table-of-contents and footnote links inside the offline reader, and preserves source language and reading direction.
+- Offers a copyable troubleshooting summary containing only version, counts and ordinal annotation statuses, without source content or identifiers.
 - Uses a readable static presentation. Original scripts, page CSS and unsupported resources are removed; this is not a pixel-perfect website archive.
 
-MarginPack is an independent third-party project, unaffiliated with Zotero or SingleFile. Version 0.1.1 is an early release with a deliberately narrow format boundary. See [validation and compatibility](docs/VALIDATION.md).
+MarginPack is an independent third-party project, unaffiliated with Zotero or SingleFile. Version 0.1.2 is an early release with a deliberately narrow format boundary. See [validation and compatibility](docs/VALIDATION.md).
 
 ## Install and export
 
-1. Download `marginpack-0.1.1.xpi` from [Releases](https://github.com/feiiiiii5/marginpack/releases).
+1. Download `marginpack-0.1.2.xpi` from [Releases](https://github.com/feiiiiii5/marginpack/releases).
 2. In Zotero 10, open **Tools → Plugins**, then install the downloaded file.
 3. Select one downloaded **HTML snapshot attachment**, or a parent item containing exactly one HTML snapshot.
 4. Choose **Tools → Export annotated snapshot with MarginPack…**. The same action is available in the item's context menu.
 5. Choose a **new** `.html` filename. Open the result in a browser and review the annotation status counts before sharing.
 
 MarginPack never replaces an existing destination file. It does not edit the original snapshot, annotations or library records. If the snapshot has not been downloaded, download it in Zotero first.
+
+See the [first-export and troubleshooting guide](docs/QUICKSTART.md) for choosing the correct snapshot, reviewing unresolved records and sharing the result. Sidebar search and filters change the display; they do not remove private content from the file.
 
 For a no-install preview, download `marginpack-demo.html` from the release and open it locally. Its page and annotations are original synthetic examples, not a real user's research.
 

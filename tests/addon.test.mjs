@@ -152,6 +152,29 @@ test('adapter exports only allowed annotation data and writes a new chosen file'
   } finally { fixture.controller.stop(); }
 });
 
+test('save suggestions use the snapshot title with portable filenames and complete Unicode characters', async () => {
+  const cases = [
+    ['中文 reading 🦊.html', '中文 reading 🦊-marginpack.html'],
+    ['  A: study / chapter? <one>  ', 'A- study - chapter- -one--marginpack.html'],
+    ['CON.report', 'Snapshot-CON.report-marginpack.html'],
+    ['...   ', 'Saved webpage-marginpack.html'],
+    ['/synthetic/private/library/source.html', 'Saved webpage-marginpack.html'],
+    ['🦊'.repeat(100), '🦊'.repeat(45) + '-marginpack.html'],
+    ['中'.repeat(100), '中'.repeat(60) + '-marginpack.html'],
+    ['A\ud800B', 'A\ufffdB-marginpack.html'],
+  ];
+  for (const [title, expected] of cases) {
+    const fixture = harness({ snapshot: attachment({ fields: { title } }) });
+    try {
+      assert.equal((await fixture.controller.exportSelected(fixture.window)).status, 'saved');
+      assert.equal(fixture.calls.pickers[0].defaultString, expected);
+      assert.ok(Buffer.byteLength(fixture.calls.pickers[0].defaultString, 'utf8') < 255, 'suggestions fit common filesystem component limits');
+      assert.equal(fixture.calls.writes[0][0], '/synthetic/exports/result.html', 'the actual chosen destination remains authoritative');
+      assert.equal(fixture.calls.writes[0][2].mode, 'create', 'title suggestions never authorize replacement');
+    } finally { fixture.controller.stop(); }
+  }
+});
+
 test('cancel or replacement selection leaves the source and filesystem unchanged', async () => {
   for (const pickerResult of [1, 2]) {
     const fixture = harness({ pickerResult });
@@ -196,6 +219,24 @@ test('menu lifecycle covers existing and new windows without duplicate or leftov
   assert.deepEqual(fixture.window.tools.children.map((node) => node.id), ['another-extension']);
   assert.equal(fixture.window.context.children.length, 0);
   assert.equal(fixture.window.MarginPack, previous, 'shutdown restores a pre-existing window property');
+});
+
+test('registered Tools and context-menu commands export the selected snapshot once while busy', async () => {
+  for (const popup of ['tools', 'context']) {
+    const fixture = harness();
+    try {
+      const menu = fixture.window[popup].children.find((node) => node.id.startsWith('marginpack-'));
+      const command = [...menu.listeners.get('command')][0];
+      command();
+      command();
+      assert.equal(menu.disabled, true, 'the actual registered callback marks its menu busy');
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(fixture.calls.writes.length, 1, 'repeated menu activation cannot launch another concurrent export');
+      assert.equal(fixture.calls.converted.length, 1);
+      assert.match(fixture.calls.alerts.at(-1), /export is saved/);
+      assert.equal(menu.disabled, false);
+    } finally { fixture.controller.stop(); }
+  }
 });
 
 test('shutdown during conversion cancels the operation before a dialog or write', async () => {

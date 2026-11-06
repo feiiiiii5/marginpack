@@ -8,6 +8,8 @@ Imported HTML is untrusted. The export reconstructs readable static content, rem
 
 An export contains the source text and annotations selected for export. Anyone receiving that file can read them. Verify the content before sharing. MarginPack does not certify that a snapshot contains no private information, that a web page is complete, or that redistribution is permitted. Public examples are synthetic.
 
+Sidebar search and filters only change visibility; they do not remove private material from the file. The optional **Troubleshooting summary** uses an allowlist of version, counts and ordinal/type/status fields. It excludes source content, titles, URLs, dates, comments, tags, identifiers, selector data and source hashes; unknown type names become `other`. You select and copy it manually. Nothing is sent, and the underlying reading file remains unchanged. Review any information before posting it publicly.
+
 Zotero’s normal plugin updater may request this project’s public GitHub update manifest and release package. MarginPack adds no telemetry or remote library service. The standalone exported reader blocks automatic network requests; following an external source link requires an explicit user action.
 
 ## Reporting
