@@ -68,6 +68,7 @@ const prefs = {
   'extensions.zotero.firstRun2': false, 'extensions.zotero.firstRunGuidance': false,
   'extensions.zotero.automaticScraperUpdates': false,
   'extensions.zoteroMacWordIntegration.skipInstallation': true,
+  'extensions.zoteroWinWordIntegration.skipInstallation': true,
   'extensions.zoteroOpenOfficeIntegration.skipInstallation': true,
   'extensions.zotero.httpServer.enabled': false, 'app.update.enabled': false,
   'extensions.update.enabled': false, 'datareporting.healthreport.uploadEnabled': false,

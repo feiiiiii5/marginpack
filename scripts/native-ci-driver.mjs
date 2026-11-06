@@ -53,7 +53,7 @@ async function gtkAction(action, path) {
     await command('xdotool', ['key', '--clearmodifiers', 'Escape']);
     return { window: saveTitle, action };
   }
-  await command('xdotool', ['key', '--clearmodifiers', 'ctrl+l']);
+  await command('xdotool', ['key', '--clearmodifiers', 'ctrl+l', 'ctrl+a']);
   // GTK requests clipboard formats before requesting UTF-8 text. Keep the
   // owner alive through that negotiation, with bounded cleanup below.
   const clipboard = spawn('xclip', ['-selection', 'clipboard', '-in', '-loops', '0', '-quiet', '-target', 'UTF8_STRING'], { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -108,10 +108,19 @@ if($config.action -eq 'cancel'){
  Write-Output 'Cancelled the real Windows save dialog'; exit 0
 }
 $editCondition=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty,[System.Windows.Automation.ControlType]::Edit)
-$edits=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
-$filename=$null
-foreach($edit in $edits){ if($edit.Current.Name -match '^File name' -or $edit.Current.AutomationId -eq '1001'){ $filename=$edit; break } }
-if(-not $filename){throw 'Native File name edit was not found'}
+$filename=$null; $deadline=(Get-Date).AddSeconds(30)
+while((Get-Date)-lt $deadline){
+ $edits=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,$editCondition)
+ foreach($edit in $edits){
+  if($edit.Current.Name -match '^File name' -or $edit.Current.AutomationId -in @('1001','1148')){ $filename=$edit; break }
+ }
+ if($filename){break}; Start-Sleep -Milliseconds 250
+}
+if(-not $filename){
+ $controls=$dialog.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+ $details=@($controls | ForEach-Object { $_.Current.ControlType.ProgrammaticName+':'+$_.Current.AutomationId+':'+$_.Current.Name }) -join '; '
+ throw ('Native File name edit was not found; controls: '+$details)
+}
 $pattern=$filename.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
 $pattern.SetValue([string]$config.path)
 $filename.SetFocus()
